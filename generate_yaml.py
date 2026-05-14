@@ -4,12 +4,12 @@ from datetime import datetime, date
 primary_disease = "gout"
 comparison_diseases = ""
 demographic = "agegroup sex ethnicity imd region"
-comorbidities = "chd diabetes cva ckd depression heart_failure liver_disease transplant alcohol"
+comorbidities = "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
 disease_features = "tophi chronic_gout"
 events = "flare"
 admissions = "gout"
 bloods = "urate creatinine cholesterol hba1c"
-medications = "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic"
+medications = "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
 outpatients = "rheumatology"
 
 # Define study period dates
@@ -243,6 +243,16 @@ yaml_footer = f"""
         log1: logs/logistic_models.log   
         table1: output/tables/melogit_summary.csv
         table2: output/tables/logistic_summary.csv
+
+  survival_models:
+    run: stata-mp:latest analysis/700_survival_models.do "{primary_disease}" "{studyfup_date}"
+    needs: [cohort_cleaning]
+    outputs:
+      moderately_sensitive:
+        log1: logs/survival_models.log   
+        table1: output/tables/landmark_cox_summary.csv
+        figure1: output/figures/km_*.svg
+        figure2: output/figures/loglog_*.svg
 
   generate_notebook:
     run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input

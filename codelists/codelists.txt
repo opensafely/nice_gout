@@ -17,9 +17,12 @@ user/markdrussell/febuxostat-120mg-doses-dmd/00161664/
 user/markdrussell/benzbromarone-dmd/4babf2e2/
 user/markdrussell/probenecid-dmd/198d0c78/
 user/markdrussell/colchicine-dmd/676e260d/
-user/markdrussell/corticosteroids-oral-im-or-iv-dmd/354f3fa3
-user/markdrussell/nsaids-oral-dmd/03305939
+nhs-drug-refsets/c19corstedrug_cod/41d73ef1
+nhs-drug-refsets/oralnsaiddrug_cod/004e8c52
 user/markdrussell/diuretics-dmd/511172ce
+nhs-drug-refsets/sglt2idrug_cod/3a85b29e
+nhs-drug-refsets/ace_cod/04ed58af
+nhs-drug-refsets/aii_cod/4b7ce5f1
 
 user/markdrussell/referral-to-rheumatology-only/0cf23b30
 
@@ -33,6 +36,8 @@ nhsd-primary-care-domain-refsets/hflvsd_cod/31a633c6
 nhsd-primary-care-domain-refsets/cldatrisk1_cod/394cfc65
 nhsd-primary-care-domain-refsets/orgtransp_cod/1cd6e7a5
 nhsd-primary-care-domain-refsets/excessalc_cod/06cf70b2
+nhsd-primary-care-domain-refsets/hyp_cod/521a90af
+
 opensafely/smoking-clear/2020-04-29
 
 opensafely/ethnicity-snomed-0removed/22911876

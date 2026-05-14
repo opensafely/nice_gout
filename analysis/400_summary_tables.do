@@ -45,12 +45,12 @@ if $running_locally ==0 {
 
 if $running_locally ==1 {
 	global disease "gout"
-	global comorbidities "chd diabetes cva ckd depression heart_failure liver_disease transplant alcohol"
+	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
 	global disease_features "tophi chronic_gout"
 	global events "flare"
 	global admissions "gout"
 	global bloods "urate creatinine cholesterol hba1c"
-	global medications "ult allopurinol febuxostat benzbromarone probenecid colchicine steroid nsaid diuretic"
+	global medications "ult allopurinol febuxostat benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
 	global outpatients "rheumatology"
 }
 
@@ -166,7 +166,7 @@ local outpatients_opa_before ${outpatients}_opa_before
 di "`outpatients_opa_before'"
 
 **Process catergorical outcomes of interest
-foreach outcome of varlist has_12m_fup has_6m_fup `outpatients_opa_before' `outpatients_ref_before' ult_risk_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
+foreach outcome of varlist has_12m_fup has_6m_fup `outpatients_opa_before' `outpatients_ref_before' ult_risk_bl sglt2_bl ace_arb_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
     rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
 }
 
@@ -315,6 +315,8 @@ table1_mc, total(before) onecol nospacelowpercent missing iqrmiddle(",")  ///
 		 urate_bl_360_repeat cat %5.1f \ ///
 		 `disease_feature_vars_bl' \ ///
 		 diuretic_bl cat %5.1f \ ///
+		 sglt2_bl cat %5.1f \ ///
+		 ace_arb_bl_bl cat %5.1f \ ///
 		 ult_risk_bl cat %5.1f \ ///
 		 ${outpatients}_ref_before cat %5.1f \ ///
 		 ${outpatients}_opa_before cat %5.1f \ ///

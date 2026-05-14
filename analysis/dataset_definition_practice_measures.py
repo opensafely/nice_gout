@@ -26,7 +26,7 @@ practice_id_int = practice_registrations.for_patient_on(interval_start).practice
 age = patients.age_on(interval_start)
 
 measures = create_measures()
-measures.configure_dummy_data(population_size=100000)
+measures.configure_dummy_data(population_size=10000)
 measures.configure_disclosure_control(enabled=False)
 measures.define_defaults(intervals=months(intervals).starting_on(measure_start_date))
 

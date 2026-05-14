@@ -70,6 +70,10 @@ alcohol_codes = codelist_from_csv(
     "codelists/nhsd-primary-care-domain-refsets-excessalc_cod.csv", column="code",
 )
 
+hypertension_codes = codelist_from_csv(
+    "codelists/nhsd-primary-care-domain-refsets-hyp_cod.csv", column="code",
+)
+
 # BMI and smoking status
 bmi_codes = ["60621009", "846931000000101"]
 
@@ -147,16 +151,33 @@ colchicine_codes = codelist_from_csv(
 )
 
 steroid_codes = codelist_from_csv(       
-    "codelists/user-markdrussell-corticosteroids-oral-im-or-iv-dmd.csv", column="code"
+    "codelists/nhs-drug-refsets-c19corstedrug_cod.csv", column="code"
 )
 
 nsaid_codes = codelist_from_csv(       
-    "codelists/user-markdrussell-nsaids-oral-dmd.csv", column="code"
+    "codelists/nhs-drug-refsets-oralnsaiddrug_cod.csv", column="code"
 )
 
 diuretic_codes = codelist_from_csv(       
     "codelists/user-markdrussell-diuretics-dmd.csv", column="code"
 )
+
+sglt2_codes = codelist_from_csv(
+    "codelists/nhs-drug-refsets-sglt2idrug_cod.csv", column="code"
+)
+
+ace_codes = codelist_from_csv(
+    "codelists/nhs-drug-refsets-ace_cod.csv", column="code"
+)
+
+arb_codes = codelist_from_csv(
+    "codelists/nhs-drug-refsets-aii_cod.csv", column="code"
+)
+
+ace_arb_codes = (
+    ace_codes + arb_codes
+)
+
 
 # Referral codes
 rheumatology_referral = codelist_from_csv(

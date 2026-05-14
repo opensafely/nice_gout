@@ -23,12 +23,12 @@ actions:
       --studyfup_date "2025-12-31"
       --primary_disease gout
       --diseases_list gout
-      --comorbidities_list chd diabetes cva ckd depression heart_failure liver_disease transplant alcohol
+      --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol
       --disease_features_list tophi chronic_gout
       --events_list flare
       --admissions_list gout
       --bloods_list urate creatinine cholesterol hba1c
-      --medications_list ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic
+      --medications_list ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb
       --outpatients_list rheumatology
     needs: [generate_dataset_incidence]
     outputs:
@@ -224,7 +224,7 @@ actions:
         measure_csv: output/measures/measures_practice_gout.csv
 
   cohort_cleaning:
-    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2025-12-31" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic" "rheumatology"
+    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2025-12-31" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [generate_dataset_primary, measures_practice_gout]
     outputs:
       highly_sensitive:
@@ -241,7 +241,7 @@ actions:
         table1: output/tables/data_table_*.csv
 
   summary_tables:
-    run: stata-mp:latest analysis/400_summary_tables.do "gout" "chd|diabetes|cva|ckd|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic" "rheumatology"
+    run: stata-mp:latest analysis/400_summary_tables.do "gout" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -264,6 +264,16 @@ actions:
         log1: logs/logistic_models.log   
         table1: output/tables/melogit_summary.csv
         table2: output/tables/logistic_summary.csv
+
+  survival_models:
+    run: stata-mp:latest analysis/700_survival_models.do "gout" "2025-12-31"
+    needs: [cohort_cleaning]
+    outputs:
+      moderately_sensitive:
+        log1: logs/survival_models.log   
+        table1: output/tables/landmark_cox_summary.csv
+        figure1: output/figures/km_*.svg
+        figure2: output/figures/loglog_*.svg
 
   generate_notebook:
     run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input

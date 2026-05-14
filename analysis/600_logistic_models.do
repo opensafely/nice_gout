@@ -47,28 +47,32 @@ if $running_locally ==1 {
 }
 di "$disease"
 
+*Define age variable
+local age_var age_decile
+
 set type double
 
 set scheme plotplainblind
 
-**Define programme to run multi-level logistic models and output values of interest===================
+*Define programme to run multi-level logistic models and output values of interest===================
+capture program drop melogit_model
 
 program define melogit_model, rclass
 
-	***Model arguments
+	**Model arguments
 	args outcome model_terms focal_predictor model_label outlabel inclusion measures do_icc
 
-	***Run model
-	capture noisily melogit `outcome' `model_terms' || practice_id:, or
+	**Run model
+	capture noisily melogit `outcome' `model_terms' || practice_id:, or iterate(100)
 	
-	****Skip if estimation failed
+	**Skip if estimation failed
 	if _rc {
 		di as txt "Skipping model (estimation failure): `model_terms'"
 		return scalar model_ok = 0
 		exit
 	}
 
-	****Skip if model doesn't converge
+	**Skip if model doesn't converge
 	capture confirm scalar e(converged)
 	if !_rc {
 		if e(converged) == 0 {
@@ -78,67 +82,75 @@ program define melogit_model, rclass
 		}
 	}
 	
-	***Check to ensure model ran ok
+	**Check to ensure model ran ok
 	return scalar model_ok = 1
+	
+	**Store model-level N and degrees of freedom
+	local n_patients = round(e(N), 5)
+	
+	local n_practices = .
+	capture confirm scalar e(N_clust)
+	if !_rc {
+		local n_practices = round(e(N_clust), 5)
+	}
+	if missing(`n_practices') {
+		tempvar tag_practice
+		egen `tag_practice' = tag(practice_id) if e(sample)
+		quietly count if `tag_practice'
+		local n_practices = round(r(N), 5)
+	}
+	
+	local df = e(df_m)
+	
+	**Strip factor prefix from focal predictor
+    local focalvar "`focal_predictor'"
+    local focalvar = subinstr("`focalvar'", "i.", "", .)
+    local focalvar = subinstr("`focalvar'", "c.", "", .)
 		
-	***Store column names for terms
+	**Store column names for terms
 	local cnames : colnames e(b)
 	
-	***Cycle through terms
+	**Cycle through terms
 	foreach term of local cnames {
 		
-		****Skip intercept and random-effect variance parameters
+		***Skip intercept and random-effect variance parameters
 		if "`term'" == "_cons" continue
 		if strpos("`term'", "var(") continue
-		
-		****Skip omitted terms
-		if regexm("`term'", "^(o\.|[0-9]+o\.).+$") {
-			
-			if regexm("`term'", "^o\.(.+)$") {
-				local varname "`=regexs(1)'"
-				local category "Omitted"
-			}
-			else if regexm("`term'", "^([0-9]+)o\.(.+)$") {
-				local levelnum "`=regexs(1)'"
-				local varname  "`=regexs(2)'"
-				
-				local labname : value label `varname'
-				if "`labname'" != "" {
-					capture local category : label `labname' `levelnum'
-					if _rc local category "`levelnum' (omitted)"
-					else local category "`category' (omitted)"
-				}
-				else {
-					local category "`levelnum' (omitted)"
-				}
-			}
-			
-			*****Store variable label
-			local varlabel : variable label `varname'
-			if "`varlabel'" == "" local varlabel "`varname'"
-			
-			*****Post output for omitted variables
-			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ///
-				("`varlabel'") ("`category'") (.) (.) (.) (.)
-			continue
-		}
-				
-		****Skip adjustment terms in age/sex-adjusted models unless they are the focal predictor
-        if "`model_label'" == "Age/sex-adjusted" {
-            if "`focal_predictor'" != "age_decile" & "`term'" == "age_decile" continue
-            if "`focal_predictor'" != "i.sex" & regexm("`term'", "^[0-9]+b?\.sex$") continue
-        }
 
-		****Defaults for continuous variables
+		***Local defaults
 		local varname "`term'"
 		local category "Continuous"
+		local levelnum ""
+		local omitted = 0
+		local base = 0
 
-		****Handle base levels
-		if regexm("`term'", "^([0-9]+)b\.(.+)$") {
+		***Handle omitted terms
+		if regexm("`term'", "^([0-9]+)o\.(.+)$") {
 			local levelnum "`=regexs(1)'"
 			local varname  "`=regexs(2)'"
-			
-			*****Store factor level labels
+			local omitted = 1
+		}
+		else if regexm("`term'", "^o\.(.+)$") {
+			local varname "`=regexs(1)'"
+			local category "Omitted"
+			local omitted = 1
+		}
+
+		***Handle base factor terms
+		else if regexm("`term'", "^([0-9]+)b\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname  "`=regexs(2)'"
+			local base = 1
+		}
+
+		***Handle regular terms
+		else if regexm("`term'", "^([0-9]+)([a-z]*)\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname  "`=regexs(3)'"
+		}
+
+		***Store factor level label, if applicable
+		if "`levelnum'" != "" {
 			local labname : value label `varname'
 			if "`labname'" != "" {
 				capture local category : label `labname' `levelnum'
@@ -147,84 +159,69 @@ program define melogit_model, rclass
 			else {
 				local category "`levelnum'"
 			}
-			
-			*****Skip adjustment base sex terms
-            if "`model_label'" == "Age/sex-adjusted" {
-                if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
-            }
-			
-			*****Store variable label
-			local varlabel : variable label `varname'
-			if "`varlabel'" == "" local varlabel "`varname'"
+		}
 
-			*****Post default output for base factor levels
-			local oddsratio = 1
-			local lower95 = .
-			local upper95 = .
-			local pvalue = .
+		***Annotate omitted terms
+		if `omitted' == 1 {
+			if "`category'" == "Continuous" local category "Omitted"
+			else local category "`category' (omitted)"
+		}
 
-			*****Post results for base factor levels
-			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`oddsratio') (`lower95') (`upper95') (`pvalue')
-			
+		***Skip adjustment terms in age/sex-adjusted models unless they are the focal predictor
+		if "`model_label'" == "Age/sex-adjusted" {
+			if "`focal_predictor'" != "`age_var'" & "`term'" == "`age_var'" continue
+			if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
+		}
+
+		***Store variable label
+		local varlabel : variable label `varname'
+		if "`varlabel'" == "" local varlabel "`varname'"
+
+		***Post omitted terms
+		if `omitted' == 1 {
+			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (.) (.) (.) (.)
 			continue
 		}
 
-		****Output estimates for terms of interest
+		***Post base factor levels
+		if `base' == 1 {
+			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (1) (.) (.) (.)
+			continue
+		}
+
+		***Output estimates for terms of interest
 		capture scalar b = _b[`outcome':`term']
 		if _rc continue
 
 		capture scalar se = _se[`outcome':`term']
 		if _rc continue
 		if missing(se) continue
-
-		****Calculate OR, CI, p-values
-		local oddsratio = round(exp(_b[`outcome':`term']), 0.001)
-		local lower95 = round(exp(_b[`outcome':`term'] - invnormal(0.975)*_se[`outcome':`term']), 0.001)
-		local upper95 = round(exp(_b[`outcome':`term'] + invnormal(0.975)*_se[`outcome':`term']), 0.001)
-		local pvalue = round(2*normal(-abs(_b[`outcome':`term']/_se[`outcome':`term'])), 0.0001)
-/*
+		if se == 0 continue
 		
-		local j = colnumb(T, "`term'")
-		if `j' >= . continue
+		***Calculate OR, CI, p-values
+		scalar or = exp(b)
+		scalar lo = exp(b - invnormal(0.975)*se)
+		scalar hi = exp(b + invnormal(0.975)*se)
+		scalar pv = 2*normal(-abs(b/se))
 
-		local oddsratio = round(T[1,`j'], 0.001)
-		local lower95   = round(T[5,`j'], 0.001)
-		local upper95   = round(T[6,`j'], 0.001)
-		local pvalue    = round(T[4,`j'], 0.0001)
-*/
-		****If factor-variable term, split level and variable
-		if regexm("`term'", "^([0-9]+)\.(.+)$") {
-			local levelnum "`=regexs(1)'"
-			local varname  "`=regexs(2)'"
+		local oddsratio = round(or, 0.001)
+		local lower95 = round(lo, 0.001)
+		local upper95 = round(hi, 0.001)
+		local pvalue = round(pv, 0.0001)
 
-			*****Store factor level labels
-			local labname : value label `varname'
-			if "`labname'" != "" {
-				capture local category : label `labname' `levelnum'
-				if _rc local category "`levelnum'"
-			}
-			else {
-				local category "`levelnum'"
-			}
-		}
-
-		****Store variable label
-		local varlabel : variable label `varname'
-		if "`varlabel'" == "" local varlabel "`varname'"
-			
-		****Post model results
-		post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`oddsratio') (`lower95') (`upper95') (`pvalue')
+		***Post model results
+		post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (`oddsratio') (`lower95') (`upper95') (`pvalue')
 	}
 	
-	****Output ICC (Proportion of the total variation in the outcome attributable to differences between practices)
+	***Output ICC (Proportion of the total variation in the outcome attributable to differences between practices)
     
-	****Passed argument to run ICC
+	***Passed argument to run ICC
 	if "`do_icc'" == "1" {
 	
-		*****Estimate ICC
+		****Estimate ICC
 		capture noisily estat icc
 
-		*****Check estimation/model hasn't failed
+		****Check estimation/model hasn't failed
 		if !_rc {
 			capture confirm scalar r(icc2)
 			if !_rc {
@@ -240,77 +237,149 @@ program define melogit_model, rclass
 					local icc_hi = .
 				}
 				
-				******Post ICC results
-				post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ///
-					("Intra-class correlation") ("Practice-level ICC") (`icc') (`icc_lo') (`icc_hi') (.)
+				*****Post ICC results
+				post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("Intra-class correlation") ("Practice-level ICC") (`n_patients') (`n_practices') (`df') (`icc') (`icc_lo') (`icc_hi') (.)
 			}
 		}
 	}
 end
 
-**Define programme to run standard logistic models and output values of interest ===================
+*Define programme to run standard logistic models and output values of interest ===================
+
+capture program drop logistic_model
 
 program define logistic_model
 
 	args outcome model_terms focal_predictor model_label outlabel inclusion measures
 
-	***Run logistic model
+	**Run logistic model
 	capture noisily logistic `outcome' `model_terms', vce(cluster practice_id)
 	
-	****Skip if estimation failed
+	**Skip if estimation failed
 	if _rc {
 		di as txt "Skipping model (estimation failure): `model_terms'"
 		exit
 	}
-		
-	****Store outputs from model
-	matrix T = r(table)
-	matrix list T
-	local cnames : colnames T
 	
-	****Strip factor prefix from focal predictor
+	**Store model-level N and degrees of freedom
+	local n_patients = round(e(N), 5)
+	
+	local n_practices = .
+	capture confirm scalar e(N_clust)
+	if !_rc {
+		local n_practices = round(e(N_clust), 5)
+	}
+	if missing(`n_practices') {
+		tempvar tag_practice
+		egen `tag_practice' = tag(practice_id) if e(sample)
+		quietly count if `tag_practice'
+		local n_practices = round(r(N), 5)
+	}
+	
+	local df = e(df_m)
+	
+	/*	
+	**Store outputs from model (different method)
+	matrix T = r(table)
+	local cnames : colnames T
+	*/
+	
+	**Strip factor prefix from focal predictor (if present)
     local focalvar "`focal_predictor'"
     local focalvar = subinstr("`focalvar'", "i.", "", .)
     local focalvar = subinstr("`focalvar'", "c.", "", .)
 	
-	***Cycle through column names
+	**Store outputs from model
+	matrix B = e(b)
+	local cnames : colnames B
+
+	**Cycle through column names
 	foreach term of local cnames {
 		
-		****Skip intercept
+		***Skip intercepts (if present)
 		if "`term'" == "_cons" continue
 		
-		****Defaults for continuous variables
+		***Store defaults
 		local varname "`term'"
 		local category "Continuous"
+		local levelnum ""
+		local omitted = 0
+		local base = 0
 		
-		*****If factor-variable term, split level and variable
-		if regexm("`term'", "^([0-9]+)([a-z]*)\.(.+)$") {
+		***Handle omitted terms
+		if regexm("`term'", "^([0-9]+)o\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname  "`=regexs(2)'"
+			local omitted = 1
+		}
+		else if regexm("`term'", "^o\.(.+)$") {
+			local varname "`=regexs(1)'"
+			local category "Omitted"
+			local omitted = 1
+		}
+		
+		***Handle base factor terms
+		else if regexm("`term'", "^([0-9]+)b\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname  "`=regexs(2)'"
+			local base = 1
+		}
+		
+		***Handle regular terms
+		else if regexm("`term'", "^([0-9]+)([a-z]*)\.(.+)$") {
 			local levelnum "`=regexs(1)'"
 			local varname  "`=regexs(3)'"
+		}
 
+		***Store factor level label, if applicable
+		if "`levelnum'" != "" {
 			local labname : value label `varname'
 			if "`labname'" != "" {
-				local category : label `labname' `levelnum'
+				capture local category : label `labname' `levelnum'
+				if _rc local category "`levelnum'"
 			}
 			else {
 				local category "`levelnum'"
 			}
 		}
+
+		***Annotate omitted terms
+		if `omitted' == 1 {
+			if "`category'" == "Continuous" local category "Omitted"
+			else local category "`category' (omitted)"
+		}
 		
-		*****Select which variables to output, depending on model
-        if "`model_label'" == "Multivariable" {
-        }
-        else {
-            if "`varname'" != "`focalvar'" continue
+		***Select which variables to output, depending on model
+		if "`model_label'" == "Multivariable" {
+		}
+		else {
+			if "`varname'" != "`focalvar'" continue
 
 			****Skip adjustment terms in age/sex-adjusted models unless they are the focal predictor
-            if "`model_label'" == "Age/sex-adjusted" {
-                if "`focal_predictor'" != "age_decile"   & "`term'" == "age_decile" continue
-                if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
-            }
-        }
+			if "`model_label'" == "Age/sex-adjusted" {
+				if "`focal_predictor'" != "`age_var'" & "`term'" == "`age_var'" continue
+				if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
+			}
+		}
+		
+		***Store variable label
+		local varlabel : variable label `varname'
+		if "`varlabel'" == "" local varlabel "`varname'"
 
-		*****Keep outputs of relevance
+		***Post omitted terms
+		if `omitted' == 1 {
+			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (.) (.) (.) (.)
+			continue
+		}
+
+		***Post base factor levels
+		if `base' == 1 {
+			post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (1) (.) (.) (.)
+			continue
+		}
+		
+		/*
+		***Keep outputs of relevance (different method)
 		local j = colnumb(T, "`term'")
 		if missing(`j') continue
 
@@ -318,83 +387,96 @@ program define logistic_model
 		local lower95 = round(T[5,`j'], 0.001)
 		local upper95 = round(T[6,`j'], 0.001)
 		local pvalue = round(T[4,`j'], 0.0001)
+		*/
+		
+		***Output estimates for terms of interest
+		capture scalar b = _b[`term']
+		if _rc continue
 
-		****Store variable label
-		local varlabel : variable label `varname'
-		if "`varlabel'" == "" local varlabel "`varname'"
-			
-		****Post model results
-		post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`oddsratio') (`lower95') (`upper95') (`pvalue')
-	}	
+		capture scalar se = _se[`term']
+		if _rc continue
+		if missing(se) continue
+		if se == 0 continue
+
+		***Calculate OR, CI, p-values
+		scalar or = exp(b)
+		scalar lo = exp(b - invnormal(0.975)*se)
+		scalar hi = exp(b + invnormal(0.975)*se)
+		scalar pv = 2*normal(-abs(b/se))
+
+		local oddsratio = round(or, 0.001)
+		local lower95 = round(lo, 0.001)
+		local upper95 = round(hi, 0.001)
+		local pvalue = round(pv, 0.0001)
+
+		***Post model results
+		post `measures' ("`inclusion'") ("`outcome'") ("`outlabel'") ("`model_label'") ("`varlabel'") ("`category'") (`n_patients') (`n_practices') (`df') (`oddsratio') (`lower95') (`upper95') (`pvalue')
+	}
 end
+
+*Define common parameters for analyses ===============================================
+
+**Inclusion criteria to loop through
+local inclusions has_12m_fup has_12m_fup_ult
+
+**Core patient-level predictors
+local patient_predictors_base ///
+    `age_var' i.sex i.imd i.ethnicity i.bmicat i.smoke i.diabetes_bl i.heart_failure_bl i.cva_bl i.hypertension_bl i.alcohol_bl i.diuretic_bl i.sglt2_bl
+	*i.ckd_comb_bl i.chd_bl //removed as this is temporary outcome
+	*consider baseline_urate too
+		
+**Core practice-level predictors
+local practice_predictors practice_list_n practice_${disease}_ratio
 
 *Run multi-level logistic models ================
 
 **Generate temporary file to store outputs
 tempname melogit_measures
-postfile `melogit_measures' str30(inclusion) str30(outcome) str30(outcome_label) str30(model) str30(variable) str30(category) double oddsratio lower95 upper95 pvalue ///
+postfile `melogit_measures' str80(inclusion) str80(outcome) str80(outcome_label) str80(model) str80(variable) str80(category) double n_patients n_practices df oddsratio lower95 upper95 pvalue ///
     using "$projectdir/output/data/melogit_summary.dta", replace
-
-*Select parameters for models ==========================================
-
-**Define inclusion criteria
-local inclusions has_12m_fup has_12m_fup_ult
 
 **Loop through inclusion criteria
 foreach inclusion of local inclusions {
 
-    di "Inclusion criterion: `inclusion'"
-
-	**Import cleaned/processed cohort
+	***Import cleaned/processed cohort
 	use "$projectdir/output/data/cohort_processed.dta", clear
 	
+	***Keep those who meet inclusion criteria
+	di "Inclusion criterion: `inclusion'"
     keep if `inclusion' == 1
 
-    **Define outcomes (specific to inclusion criteria)
+    ***Define outcomes and additional predictors (specific to inclusion criteria); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
 	if "`inclusion'" == "has_12m_fup" {
 		*local outcomes ult_12m
-		local outcomes ckd_comb_bl
+		local outcomes ckd_comb_bl //this is a test
+		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
 		*local outcomes urate_12m_ult
-        local outcomes chd_bl
+        local outcomes chd_bl //this is a test
+		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
     }
     else {
         di as error "No outcomes defined for `inclusion'"
         continue
     }
-
-    **Define patient-level predictors (specific to inclusion criteria, if required); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
-    local patient_predictors ///
-        age_decile i.sex i.imd i.ethnicity i.diabetes_bl i.heart_failure_bl i.cva_bl i.bmicat i.diuretic_bl i.alcohol_bl i.smoke
-		*i.ckd_comb_bl i.chd_bl //removed as this is temporary outcome
-		*could add address urban vs. rural as well
-
-
-    if "`inclusion'" == "has_12m_fup" {
-        local patient_predictors `patient_predictors' i.post_nice_diag
-    }
-    else if "`inclusion'" == "has_12m_fup_ult" {
-        local patient_predictors `patient_predictors' i.post_nice_ult
-    }
-
-	**Define practice-level predictors
-    local practice_predictors practice_list_n practice_${disease}_ratio
 		
 	***Loop through outcomes
 	foreach outcome of local outcomes {
+		
+		di "Outcome: `outcome'"
 		
 		****Store outcome variable name
 		local outlabel : variable label `outcome'
 		if "`outlabel'" == "" local outlabel "`outcome'"
 				
 		****Estimate practice-level variation/ICC without predictors ============
-		melogit_model `outcome' `""' `""' `"Empty model"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 1
+		melogit_model `outcome' `""' `""' `"ICC only"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 1
 
 		****Univariable models with patient-level and practice-level predictors ==============
 		
 		*****Store predictors
-		local predictors `patient_predictors' `practice_predictors'
+		local predictors `patient_predictors_full' `practice_predictors'
 		
 		*****Loop through predictors
 		foreach predictor of local predictors {
@@ -404,29 +486,28 @@ foreach inclusion of local inclusions {
 		****Age and sex-adjusted models (Nb. don't usually need to present age/sex-adjusted practice-level variables) ============
 		
 		*****Store predictors
-		local predictors `patient_predictors' 
+		local predictors `patient_predictors_full' 
 		
 		*****Loop through predictors
 		foreach predictor of local predictors {
 			
-			******Define age and sex-adjustment
 			local model_terms `predictor' age_decile i.sex
-			if "`predictor'" == "age_decile" local model_terms age_decile i.sex
-			if "`predictor'" == "i.sex" local model_terms i.sex age_decile
+			if "`predictor'" == "`age_var'" local model_terms `age_var' i.sex
+			if "`predictor'" == "i.sex" local model_terms i.sex `age_var'
 			
-			******Run model
 			melogit_model `outcome' `"`model_terms'"' `"`predictor'"' `"Age/sex-adjusted"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 0
 		}
 		
 		****Multivariable model with patient-level predictors only ===========		
+		local predictors `patient_predictors_full' 
+		
 		melogit_model `outcome' `"`predictors'"' `""' `"Multivariable patient"' `"`outlabel'"' `"`inclusion'"'  `melogit_measures' 1
 		 
 		****Multivariable model with patient-level predictors and practice-level predictors ============
 		
 		*****Store predictors
-		local predictors `patient_predictors' `practice_predictors'
+		local predictors `patient_predictors_full' `practice_predictors'
 		
-		*****Run model
 		melogit_model `outcome' `"`predictors'"' `""' `"Multivariable pt/practice"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 1
 		 
 	}
@@ -439,83 +520,72 @@ use "$projectdir/output/data/melogit_summary.dta", clear
 format oddsratio lower95 upper95 %9.3f
 format pvalue %9.4f
 
-export delimited using "$projectdir/output/tables/melogit_summary.csv", replace
+export delimited using "$projectdir/output/tables/melogit_summary.csv", replace datafmt
 
 *Run logistic regression models =====================================
 
 **Generate temporary file to store outputs
 tempname logistic_measures
-postfile `logistic_measures' str30(inclusion) str30(outcome) str30(outcome_label) str20(model) str30(variable) str30(category) double oddsratio lower95 upper95 pvalue ///
+postfile `logistic_measures' str80(inclusion) str80(outcome) str80(outcome_label) str80(model) str80(variable) str80(category) double n_patients n_practices df oddsratio lower95 upper95 pvalue ///
     using "$projectdir/output/data/logistic_summary.dta", replace
 	
-**Define inclusion criteria
-local inclusions has_12m_fup has_12m_fup_ult
-
 **Loop through inclusion criteria
 foreach inclusion of local inclusions {
 
-    di "Inclusion criterion: `inclusion'"
-
-	**Import cleaned/processed cohort
+	***Import cleaned/processed cohort
 	use "$projectdir/output/data/cohort_processed.dta", clear
 	
+	***Keep those who meet inclusion criteria
+	di "Inclusion criterion: `inclusion'"
     keep if `inclusion' == 1
 
-    **Define outcomes (specific to inclusion criteria)
+    ***Define outcomes and additional predictors (specific to inclusion criteria); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
 	if "`inclusion'" == "has_12m_fup" {
 		*local outcomes ult_12m
-		local outcomes ckd_comb_bl
+		local outcomes ckd_comb_bl //this is a test
+		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
 		*local outcomes urate_12m_ult
-        local outcomes chd_bl
+        local outcomes chd_bl //this is a test
+		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
     }
     else {
         di as error "No outcomes defined for `inclusion'"
         continue
     }
-
-    **Define patient-level predictors (specific to inclusion criteria, if required); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
-    local patient_predictors ///
-        age_decile i.sex i.imd i.ethnicity i.diabetes_bl i.heart_failure_bl i.cva_bl i.bmicat i.diuretic_bl i.alcohol_bl i.smoke
-		*i.ckd_comb_bl i.chd_bl //removed as this is temporary outcome
-
-    if "`inclusion'" == "has_12m_fup" {
-        local patient_predictors `patient_predictors' i.post_nice_diag
-    }
-    else if "`inclusion'" == "has_12m_fup_ult" {
-        local patient_predictors `patient_predictors' i.post_nice_ult
-    }
-
-	**Loop through outcomes
+	
+	***Loop through outcomes
 	foreach outcome of local outcomes {
 		
-		***Store outcome variable name
+		****Store outcome variable name
 		local outlabel : variable label `outcome'
 		if "`outlabel'" == "" local outlabel "`outcome'"
 		
-		***Store predictors
-		local predictors `patient_predictors'
+		****Store predictors
+		local predictors `patient_predictors_full'
 		
-		***Run univariable models ===============
+		****Run univariable models ===============
 
-		***Loop through predictors
+		****Loop through predictors
 		foreach predictor of local predictors {
-			
 			logistic_model `outcome' `"`predictor'"' `"`predictor'"' `"Univariable"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'
 		}
 		
-		***Run age and sex-adjusted models ================
+		****Run age and sex-adjusted models ================
+		
+		****Loop through predictors
 		foreach predictor of local predictors {
 			
 			local model_terms `predictor' age_decile i.sex
-			if "`predictor'" == "age_decile" local model_terms age_decile i.sex
-			if "`predictor'" == "i.sex" local model_terms i.sex age_decile
+			if "`predictor'" == "`age_var'" local model_terms `age_var' i.sex
+			if "`predictor'" == "i.sex" local model_terms i.sex `age_var'
 			
 			logistic_model `outcome' `"`model_terms'"' `"`predictor'"' `"Age/sex-adjusted"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'
 		}
 		
-		***Run multivariable model with all selected predictors ============
+		****Run multivariable model with all selected predictors ============
+		
 		logistic_model `outcome' `"`predictors'"' `""' `"Multivariable"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'
 		
 	}
@@ -529,6 +599,6 @@ use "$projectdir/output/data/logistic_summary.dta", clear
 format oddsratio lower95 upper95 %9.3f
 format pvalue %9.4f
 
-export delimited using "$projectdir/output/tables/logistic_summary.csv", replace
+export delimited using "$projectdir/output/tables/logistic_summary.csv", replace datafmt
 
 log close

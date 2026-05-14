@@ -49,12 +49,12 @@ if $running_locally ==1 {
 	global studyfup_date "2025-12-31"
 	global nice_date "2022-06-01"
 	global demographic "agegroup sex ethnicity imd region"
-	global comorbidities "chd diabetes cva ckd depression heart_failure liver_disease transplant alcohol"
+	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
 	global disease_features "tophi chronic_gout"
 	global events "flare"
 	global admissions "gout"
 	global bloods "urate creatinine cholesterol hba1c"
-	global medications "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic"
+	global medications "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
 	global outpatients "rheumatology"
 }
 
@@ -447,23 +447,25 @@ foreach feature in $disease_features {
 
 save "$projectdir/output/data/cohort_generic.dta", replace
 
-*Disease-specific medications (amend as necessary; can loop if needed) =================================*/
+*Disease-specific medications (amend as necessary) =================================*/
 
 use "$projectdir/output/data/cohort_generic.dta", clear
 
 **Specify drug of interest: diuretics =============*/
-local drug "diuretic"
+foreach drug in diuretic sglt2 ace_arb {
 
-local Drug = strproper("`drug'") //first letter capitalised for labelling
-di "`drug'"
+	local Drug = strproper("`drug'") //first letter capitalised for labelling
+	di "`drug'"
 
-***Drug use at baseline (prescribed within 6 months prior to index diagnosis)
-codebook `drug'_bl_date //check
-gen `drug'_bl = 1 if (${disease}_inc_date - `drug'_bl_date) <= 183 & `drug'_bl_date != . //not necessary
-recode `drug'_bl .=0
-lab define `drug'_bl 0 "No" 1 "Yes", modify
-lab val `drug'_bl `drug'_bl
-lab var `drug'_bl "`Drug' at baseline"
+	***Drug use at baseline (prescribed within 6 months prior to index diagnosis)
+	codebook `drug'_bl_date //check then remove
+	
+	gen `drug'_bl = 1 if (${disease}_inc_date - `drug'_bl_date) <= 183 & `drug'_bl_date != . //not necessary
+	recode `drug'_bl .=0
+	lab define `drug'_bl 0 "No" 1 "Yes", modify
+	lab val `drug'_bl `drug'_bl
+	lab var `drug'_bl "`Drug' at baseline"
+}
 
 **Specify drug of interest: urate-lowering therapy (ULT) =============*/
 local drug "ult"
@@ -818,8 +820,8 @@ gen egfr_date_ = creatinine_date_
 format egfr_date_ %td
 codebook egfr_value_ if creatinine_order==1 //check
 
-***Date of first eGFR <60 (from 24 months before diagnosis to end of study follow-up) - can also amend this to look at other CKD stages (e.g. ESRF)
-gen egfr_ckd = 1 if egfr_value_< 60 & egfr_value_!=.
+***Date of first eGFR <60 (from 24 months before diagnosis to end of study follow-up) - consider amending 24-month limit for survival analyses
+gen egfr_ckd = 1 if egfr_value_< 60 & !missing(egfr_value_)
 bys patient_id egfr_ckd (egfr_date_): gen n=_n if egfr_ckd!=.
 gen first_egfr_ckd_date = egfr_date_ if n==1
 format first_egfr_ckd_date %td
@@ -827,9 +829,18 @@ drop n
 sort patient_id first_egfr_ckd_date
 by patient_id: replace first_egfr_ckd_date = first_egfr_ckd_date[_n-1] if missing(first_egfr_ckd_date)
 lab var first_egfr_ckd_date "Date of first eGFR <60"
-drop egfr_ckd
 
-***Generate baseline eGFR (if available)
+***Date of second eGFR <60 at least 90 days after first eGFR <60
+gen subsequent_egfr_ckd = 1 if egfr_ckd == 1 & !missing(first_egfr_ckd_date) & (egfr_date_ >= (first_egfr_ckd_date + 90))
+bys patient_id subsequent_egfr_ckd (egfr_date_): gen n=_n if subsequent_egfr_ckd==1
+gen second_egfr_ckd_date = egfr_date_ if n==1
+format second_egfr_ckd_date %td
+drop n
+sort patient_id second_egfr_ckd_date
+by patient_id: replace second_egfr_ckd_date = second_egfr_ckd_date[_n-1] if missing(second_egfr_ckd_date)
+lab var second_egfr_ckd_date "Date of second eGFR <60, at least 90 days after first"
+
+***Baseline eGFR value with respect to diagnosis date
 gen egfr_bl_date = egfr_date_ if creatinine_bl_date == egfr_date_ & creatinine_bl_date!=. & egfr_value_!=. & egfr_date_!=.
 format egfr_bl_date %td
 gen egfr_bl_value = egfr_value_ if creatinine_bl_date == egfr_date_ & creatinine_bl_date!=. & egfr_value_!=. & egfr_date_!=.
@@ -837,8 +848,21 @@ sort patient_id egfr_bl_date
 by patient_id: replace egfr_bl_date = egfr_bl_date[_n-1] if missing(egfr_bl_date)
 sort patient_id egfr_bl_value
 by patient_id: replace egfr_bl_value = egfr_bl_value[_n-1] if missing(egfr_bl_value)
-label var egfr_bl_value "eGFR at baseline"
-label var egfr_bl_date "Date of eGFR at baseline"
+lab var egfr_bl_value "Baseline eGFR at diagnosis"
+lab var egfr_bl_date "Date of eGFR at diagnosis"
+
+***Baseline eGFR value with respect to ULT initiation date (up to 12 months before)
+gen time_egfr_before_ult = (ult_first_date - egfr_date_) if egfr_date_!=. & ult_first_date!=.
+gen egfr_before_ult = 1 if (time_egfr_before_ult<=365) & (time_egfr_before_ult>0) & time_egfr_before_ult!=. & egfr_value_!=. //blood tests on or before initiating ULT
+bys patient_id egfr_before_ult (time_egfr_before_ult): gen n=_n if egfr_before_ult==1
+gen egfr_before_ult_value = egfr_value_ if n==1
+lab var egfr_before_ult_value "Baseline eGFR before initiating ULT"
+sort patient_id egfr_before_ult_value
+by patient_id: replace egfr_before_ult_value = egfr_before_ult_value[_n-1] if missing(egfr_before_ult_value)
+tabstat egfr_before_ult_value, stats(n mean sd p50 p25 p75)
+drop n egfr_before_ult time_egfr_before_ult
+
+drop egfr_ckd subsequent_egfr_ckd
 
 reshape wide creatinine_value_ creatinine_date_ egfr_value_ egfr_date_, i(patient_id) j(creatinine_order)
 
@@ -1144,20 +1168,27 @@ foreach t in 6 12 {
 	by patient_id: replace lowest_urate_`t'm_ult = lowest_urate_`t'm_ult[_n-1] if missing(lowest_urate_`t'm_ult)
 	drop n urate_value_`t'm_ult
 	
-	***Categorical variable, overall (coded missing)
-	gen urate_`t'm_ult_cat = 1 if lowest_urate_`t'm_ult<360 & lowest_urate_`t'm_ult!=.
-	replace urate_`t'm_ult_cat = 0 if lowest_urate_`t'm_ult>=360 & lowest_urate_`t'm_ult!=.
-	replace urate_`t'm_ult_cat = 9 if lowest_urate_`t'm_ult==.
-	lab var urate_`t'm_ult_cat  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
-	lab def urate_`t'm_ult_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", modify
-	lab val urate_`t'm_ult_cat urate_`t'm_ult_cat
-	
 	***Binary variable, overall (uncoded missing)
 	gen urate_`t'm_ult = 1 if lowest_urate_`t'm_ult<360 & lowest_urate_`t'm_ult!=.
 	replace urate_`t'm_ult = 0 if lowest_urate_`t'm_ult>=360 & lowest_urate_`t'm_ult!=.
 	lab var urate_`t'm_ult  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
 	lab def urate_`t'm_ult 0 ">=360 micromol/L" 1 "<360 micromol/L", modify
 	lab val urate_`t'm_ult urate_`t'm_ult
+	
+	***Categorical variable, overall (coded missing)
+	gen urate_`t'm_ult_cat = 1 if lowest_urate_`t'm_ult<360 & lowest_urate_`t'm_ult!=.
+	replace urate_`t'm_ult_cat = 0 if lowest_urate_`t'm_ult>=360 & lowest_urate_`t'm_ult!=.
+	replace urate_`t'm_ult_cat = 9 if lowest_urate_`t'm_ult==. //includes those who didn't receive ULT
+	lab var urate_`t'm_ult_cat  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
+	lab def urate_`t'm_ult_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", modify
+	lab val urate_`t'm_ult_cat urate_`t'm_ult_cat
+	
+	***Binary variable, overall (missing recoded as not attained)
+	gen urate_`t'm_ult_recode = urate_`t'm_ult
+	replace urate_`t'm_ult_recode = 0 if urate_`t'm_ult ==. //includes those who didn't receive ULT
+	lab var urate_`t'm_ult_recode  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
+	lab def urate_`t'm_ult_recode 0 ">=360 micromol/L or not known" 1 "<360 micromol/L", modify
+	lab val urate_`t'm_ult_recode urate_`t'm_ult_recode
 		
 	tab urate_within_`t'm_ult, missing
 	tabstat urate_count_`t'm_ult, stats(n mean sd p50 p25 p75)
@@ -1178,7 +1209,19 @@ foreach t in 6 12 {
 		tab urate_`t'm_ult_cat_`start', missing
 	}
 }
+
 drop time_ult_to_urate
+
+**Baseline urate level in the 12 months on or before ULT initiation
+gen time_urate_before_ult = (ult_first_date - urate_date_) if urate_date_!=. & ult_first_date!=.
+gen urate_before_ult = 1 if (time_urate_before_ult<=365) & (time_urate_before_ult>0) & time_urate_before_ult!=. & urate_value_!=. //blood tests on or before initiating ULT
+bys patient_id urate_before_ult (time_urate_before_ult): gen n=_n if urate_before_ult==1
+gen urate_before_ult_value = urate_value_ if n==1
+lab var urate_before_ult_value "Baseline serum urate level before initiating ULT"
+sort patient_id urate_before_ult_value
+by patient_id: replace urate_before_ult_value = urate_before_ult_value[_n-1] if missing(urate_before_ult_value)
+tabstat urate_before_ult_value, stats(n mean sd p50 p25 p75)
+drop n time_urate_before_ult
 
 reshape wide urate_value_ urate_date_, i(patient_id) j(urate_order)
 
@@ -1533,6 +1576,96 @@ foreach t in 6 12 {
 	lab def ${outpatients}_refopa_`t'm_risk 0 "No" 1 "Yes", modify
 	lab val ${outpatients}_refopa_`t'm_risk ${outpatients}_refopa_`t'm_risk
 	tab ${outpatients}_refopa_`t'm_risk, missing
+}
+
+save "$projectdir/output/data/cohort_processed_outpatients.dta", replace
+
+*Further cleaning for landmark survival analyes=====================
+
+use "$projectdir/output/data/cohort_processed_outpatients.dta", clear
+
+**CKD status with relation to ULT initiation date
+gen ckd_pre_ult = 0
+replace ckd_pre_ult = 1 if (first_ckd_comb_date <= ult_first_date) & first_ckd_comb_date !=. & ult_first_date !=.
+replace ckd_pre_ult =. if ult_first_date ==.
+label def ckd_pre_ult 0 "No" 1 "Yes"
+label val ckd_pre_ult ckd_pre_ult
+label var ckd_pre_ult "Evidence of CKD before ULT initiation"
+
+gen ckd_free_ult = 0
+replace ckd_free_ult = 1 if ((first_ckd_comb_date > ult_first_date) & first_ckd_comb_date !=. & ult_first_date !=.) | first_ckd_comb_date ==.
+replace ckd_free_ult =. if ult_first_date ==.
+label def ckd_free_ult 0 "No" 1 "Yes"
+label val ckd_free_ult ckd_free_ult
+label var ckd_free_ult "No evidence of CKD at ULT initiation"
+
+**Landmark date: 12 months after ULT initiation
+gen ult_landmark = (ult_first_date + 365) if ult_first_date !=.
+format ult_landmark %td
+label var ult_landmark "ULT initiation + 12 months"
+
+**CKD status with relation to landmark date
+gen ckd_pre_landmark = 0
+replace ckd_pre_landmark = 1 if (first_ckd_comb_date <= ult_landmark) & first_ckd_comb_date !=. & ult_landmark !=.
+replace ckd_pre_landmark =. if ult_landmark ==.
+label def ckd_pre_landmark 0 "No" 1 "Yes"
+label val ckd_pre_landmark ckd_pre_landmark
+label var ckd_pre_landmark "Evidence of CKD before ULT landmark"
+
+gen ckd_free_landmark = 0
+replace ckd_free_landmark = 1 if ((first_ckd_comb_date > ult_landmark) & first_ckd_comb_date !=. & ult_landmark !=.) | first_ckd_comb_date ==.
+replace ckd_free_landmark =. if ult_landmark ==.
+label def ckd_free_landmark 0 "No" 1 "Yes"
+label val ckd_free_landmark ckd_free_landmark
+label var ckd_free_landmark "No evidence of CKD at ULT landmark"
+
+**Covariates with relation to landmark date
+
+***Age at landmark
+gen time_diag_land = (ult_landmark - ${disease}_inc_date) if ult_landmark!=.
+gen time_diag_land_yr = time_diag_land/365.25 if ult_landmark!=.
+gen age_land = (age + time_diag_land_yr) if ult_landmark!=.
+gen age_land_decile = (age_land/10) if ult_landmark!=.
+lab var age_land_decile "Age at landmark, decile"
+drop time_diag_land  time_diag_land_yr
+
+***Comorbidities at landmark
+foreach comorbidity in $comorbidities {
+    local lbl : subinstr local comorbidity "_" " ", all
+	local lbl = strproper("`lbl'")
+	di "`lbl'"
+	
+	gen `comorbidity'_land = 0
+	replace `comorbidity'_land = 1 if (`comorbidity'_date <= ult_landmark) & `comorbidity'_date!=. & ult_landmark!=.
+	replace `comorbidity'_land =. if ult_landmark ==.
+	lab define `comorbidity'_land 0 "No" 1 "Yes", modify
+	lab var `comorbidity'_land "`lbl' at or before landmark"
+	lab val `comorbidity'_land `comorbidity'_land
+	tab `comorbidity'_land, missing
+}
+
+lab var ckd_land "CKD at or before landmark"
+lab var diabetes_land "T2DM at or before landmark"
+lab var chd_land "CHD at or before landmark"
+lab var cva_land "Stroke/TIA at or before landmark"
+lab var liver_disease_land "Chronic liver disease at or before landmark"
+lab var transplant_land "Solid organ transplant at or before landmark"
+lab var alcohol_land "Excess alcohol at or before landmark"
+
+***Drugs at landmark (prescriptions within 6 months before)
+foreach drug in diuretic sglt2 ace_arb {
+	
+	local Drug = strproper("`drug'") //first letter capitalised for labelling
+	di "`drug'"
+
+	gen `drug'_land = 0 if !missing(ult_landmark)
+
+	forval i = 1/$max_prescription {
+		replace `drug'_land = 1 if !missing(`drug'_date_`i') & !missing(ult_landmark) & (`drug'_date_`i' >= (ult_landmark - 183)) & (`drug'_date_`i' <= ult_landmark)
+	}
+	lab var `drug'_land "`Drug' prescription within 6m before landmark"
+	lab def `drug'_land 0 "No" 1 "Yes", modify
+	lab val `drug'_land `drug'_land
 }
 
 save "$projectdir/output/data/cohort_processed_prepractice.dta", replace

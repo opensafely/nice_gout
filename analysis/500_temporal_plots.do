@@ -13,10 +13,12 @@ USER-INSTALLED ADO:
 /*
 global projectdir "C:\Users\k1754142\OneDrive\PhD Project\OpenSAFELY NICE\nice_gout"
 global running_locally = 1 // Running on local machine
+global img png
 */
 
 global projectdir `c(pwd)'
 global running_locally = 0 // Running on OpenSAFELY console
+global img svg
 
 capture mkdir "$projectdir/output/data"
 capture mkdir "$projectdir/output/figures"
@@ -148,8 +150,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 
 		***Temporal plot over study period (scatter with moving average)
 		twoway scatter prop month_year, ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line prop_ma month_year, lcolor(emerald) lstyle(solid) ylabel(, `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
-		*graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.png", replace
-		graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.svg", replace
+		graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.$img", replace
 
 		**ITSA graphs
 				
@@ -256,14 +257,12 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			graphregion(margin(r=20)) plotregion(margin(r=15)) ///
 			text(`ybox' `xbox' `boxlines', place(e) just(left) box bcolor(white) margin(small) size(small)) ///
 			name("`outcome'", replace)
-			*graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.png", replace
-			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.svg", replace
+			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
 			
 		/*  itsa prop if inrange(month_year, `start', `end'), single trperiod($intervention_tm) lag(5) replace posttrend  ///
 			figure(xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(1)) xlabel(`xlabel', nogrid labsize(small) axis(1)) xlabel($intervention "NICE Guideline", axis(2) labsize(small) labcolor(navy)) xtitle("", axis(2)) xscale(noline axis(2)) title("", size(small)) lstyle(dashed) subtitle("", size(medsmall)) ytitle("`ytitle'", size(medsmall) margin(small)) ylabel(, nogrid `format' labsize(small)) note("", size(v.small)) legend(off) name("itsa_`outcome'", replace) ///
 			) 
-			*graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.png", replace
-			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.svg", replace
+			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
 		*/
 			actest, lag(18)		
 		}
@@ -437,8 +436,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 
 			***Build plots
 			twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(, `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
-			*graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.png", replace
-			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.svg", replace
+			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.$img", replace
 		}	
 	}	
 }
@@ -538,8 +536,7 @@ foreach table in postdiagnosis {
 
 		***Build plots
 		twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
-		*graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.png", replace
-		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.svg", replace
+		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.$img", replace
 	}
 }
 
@@ -643,8 +640,7 @@ foreach table in postult {
 
 		***Build plots
 		twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels' title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
-		*graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.png", replace
-		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.svg", replace
+		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.$img", replace
 	}
 }
 
@@ -729,8 +725,7 @@ foreach table in ult_drug flare_drug {
 
 	***Build plots
     twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'", replace) saving("$projectdir/output/figures/temporal_plot_`table'.gph", replace)
-	*graph export "$projectdir/output/figures/temporal_plot_`table'.png", replace
-	graph export "$projectdir/output/figures/temporal_plot_`table'.svg", replace
+	graph export "$projectdir/output/figures/temporal_plot_`table'.$img", replace
 }
 
 log close
