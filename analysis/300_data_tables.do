@@ -69,13 +69,13 @@ program define rounded_datatable
 		collapse (sum) count_un=`var' (count) total_un=`var', by(`time_variable')
 
 		**Round and redact counts
-		gen count_all=count_un
-		*gen count_all=round(count_un, 5)
-		*replace count_all = . if count_all<=7
+		*gen count_all=count_un
+		gen count_all=round(count_un, 5)
+		replace count_all = . if count_all<=7
 		drop count_un
-		gen total_all=total_un
-		*gen total_all=round(total_un, 5)
-		*replace total_all = . if count_all==.
+		*gen total_all=total_un
+		gen total_all=round(total_un, 5)
+		replace total_all = . if count_all==.
 		drop total_un
 		gen prop_all = count_all/total_all
 
@@ -107,13 +107,13 @@ program define rounded_datatable_demog
 		collapse (sum) count_un=`var' (count) total_un=`var', by(`time_variable' `demog_variable')
 		
 		**Round and redact counts
-		gen count_=count_un
-		*gen count_=round(count_un, 5)
-		*replace count_ = . if count<=7
+		*gen count_=count_un
+		gen count_=round(count_un, 5)
+		replace count_ = . if count<=7
 		drop count_un
-		gen total_=total_un
-		*gen total_=round(total_un, 5)
-		*replace total_ = . if count==.
+		*gen total_=total_un
+		gen total_=round(total_un, 5)
+		replace total_ = . if count==.
 		drop total_un
 		gen prop_ = count_/total_
 	

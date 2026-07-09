@@ -253,7 +253,7 @@ foreach t in 12 {
 	export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
 }
 
-*Generate unrounded tables for checking (for log file, not outputted) ==============================*/
+/*Generate unrounded tables for checking (not outputted) ==============================*
 
 **Baseline table
 
@@ -461,5 +461,5 @@ foreach t in 12 {
 	restore	
 */
 }
-
+*/
 log close

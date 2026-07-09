@@ -283,7 +283,7 @@ global cox_measures `cox_measures'
 
 capture stset, clear
 
-******Test criteria: remove later********
+/******Test criteria: remove********
 local cohort_entry_date flare_overall_date_1
 local landmark_date flare_overall_date_1
 local exposure_primary ckd_comb
@@ -294,6 +294,7 @@ gen test = 1
 local outcome_free_baseline test 
 local outcome_free_landmark test 
 local outcomes nsaid_last_date gout_adm_date_1     
+*/
 
 preserve
 
