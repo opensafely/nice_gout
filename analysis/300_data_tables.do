@@ -108,12 +108,12 @@ program define rounded_datatable_demog
 		
 		**Round and redact counts
 		*gen count_=count_un
-		gen count_=round(count_un, 5)
-		replace count_ = . if count<=7
+		gen count_ = round(count_un, 5)
+		replace count_ = . if count_ <=7
 		drop count_un
 		*gen total_=total_un
 		gen total_=round(total_un, 5)
-		replace total_ = . if count==.
+		replace total_ = . if count_==.
 		drop total_un
 		gen prop_ = count_/total_
 	
