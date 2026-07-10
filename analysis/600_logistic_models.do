@@ -421,8 +421,8 @@ local inclusions has_12m_fup has_12m_fup_ult
 
 **Core patient-level predictors
 local patient_predictors_base ///
-    `age_var' i.sex i.imd i.ethnicity i.bmicat i.smoke i.diabetes_bl i.heart_failure_bl i.cva_bl i.hypertension_bl i.alcohol_bl i.diuretic_bl i.sglt2_bl
-	*i.ckd_comb_bl i.chd_bl //removed as this is temporary outcome
+    `age_var' i.sex i.imd i.ethnicity i.bmicat i.smoke i.ckd_comb_bl i.chd_bl i.diabetes_bl i.heart_failure_bl i.cva_bl i.hypertension_bl i.alcohol_bl i.diuretic_bl i.sglt2_bl
+	*i.ckd_comb_bl i.chd_bl //this is a test
 	*consider baseline_urate too
 		
 **Core practice-level predictors
@@ -447,13 +447,13 @@ foreach inclusion of local inclusions {
 
     ***Define outcomes and additional predictors (specific to inclusion criteria); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
 	if "`inclusion'" == "has_12m_fup" {
-		*local outcomes ult_12m
-		local outcomes ckd_comb_bl //this is a test
+		local outcomes ult_12m
+		*local outcomes ckd_comb_bl //this is a test
 		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
-		*local outcomes urate_12m_ult
-        local outcomes chd_bl //this is a test
+		local outcomes urate_12m_ult
+        *local outcomes chd_bl //this is a test
 		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
     }
     else {
@@ -541,13 +541,13 @@ foreach inclusion of local inclusions {
 
     ***Define outcomes and additional predictors (specific to inclusion criteria); also need to think about interactions between i.post_nice and variables - Nb. programmes about won't output factors properly
 	if "`inclusion'" == "has_12m_fup" {
-		*local outcomes ult_12m
-		local outcomes ckd_comb_bl //this is a test
+		local outcomes ult_12m
+		*local outcomes ckd_comb_bl //this is a test
 		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
-		*local outcomes urate_12m_ult
-        local outcomes chd_bl //this is a test
+		local outcomes urate_12m_ult
+        *local outcomes chd_bl //this is a test
 		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
     }
     else {

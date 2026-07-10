@@ -21,6 +21,10 @@ global running_locally = 1 // Running on local machine
 global projectdir `c(pwd)'
 global running_locally = 0 // Running on OpenSAFELY console
 
+capture mkdir "$projectdir/output/data"
+capture mkdir "$projectdir/output/tables"
+capture mkdir "$projectdir/output/figures"
+
 *Open a log file
 global logdir "$projectdir/logs"
 cap log close

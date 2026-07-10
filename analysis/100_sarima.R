@@ -329,7 +329,6 @@ for (j in 1:length(disease_list)) {
     #ggsave(filename = paste0("output/figures/obs_pred_", var, "_", dis, ".svg"), plot = c1, width = 1200, height = 600, units = "px", device = svglite::svglite)
     ggsave(filename = paste0("output/figures/obs_pred_", var, "_", dis, ".png"), plot = c1, width = 1200, height = 600, units = "px", dpi = 144, bg = "white", device = "png", type="cairo")
     
-    
     print(c1)
     
     # Store y-axis values for Prophet sensitivity analyses
@@ -348,7 +347,6 @@ for (j in 1:length(disease_list)) {
     results_list <- vector("list", n)
     
     # Table suffixes
-
     suffix <- as.character(year(intervention_date) + seq_len(n) - 1L)
     suffix[n] <- "total"
     

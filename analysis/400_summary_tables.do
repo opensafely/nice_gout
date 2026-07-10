@@ -253,7 +253,7 @@ foreach t in 12 {
 	export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
 }
 
-*Generate unrounded tables for checking (for log file, not outputted) ==============================*/
+/*Generate unrounded tables for checking (not outputted) ==============================*
 
 **Baseline table
 
@@ -316,7 +316,7 @@ table1_mc, total(before) onecol nospacelowpercent missing iqrmiddle(",")  ///
 		 `disease_feature_vars_bl' \ ///
 		 diuretic_bl cat %5.1f \ ///
 		 sglt2_bl cat %5.1f \ ///
-		 ace_arb_bl_bl cat %5.1f \ ///
+		 ace_arb_bl cat %5.1f \ ///
 		 ult_risk_bl cat %5.1f \ ///
 		 ${outpatients}_ref_before cat %5.1f \ ///
 		 ${outpatients}_opa_before cat %5.1f \ ///
@@ -461,5 +461,5 @@ foreach t in 12 {
 	restore	
 */
 }
-
+*/
 log close
