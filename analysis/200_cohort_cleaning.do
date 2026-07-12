@@ -26,6 +26,7 @@ capture mkdir "$projectdir/output/tables"
 global logdir "$projectdir/logs"
 cap log close
 log using "$logdir/cohort_cleaning.log", replace
+log off
 
 *Set Ado file path
 adopath + "$projectdir/analysis/extra_ados"
@@ -722,16 +723,31 @@ foreach blood in $bloods {
 			tabstat `blood'_value_`i', stats(n mean sd p50 p25 p75)
 		}
 	}
+	
+	log on 
+	***Additional cleaning and unit conversion for urate
+	if "`blood'" == "urate" & `max'!= 0 {
+		forval i = 1/`max' {
 
-	/*
-	***Nb for urate, depending on code, urate is in range 0.05 - 2 mmol/L or 50 - 2000 micromol/L; need also to consider mg/dL
-			summ urate_value_`i' if inrange(urate_value_`i', 0.05, 2) // for mmol/L
-			summ urate_value_`i' if inrange(urate_value_`i', 50, 2000) // for micromol/L
-			summ urate_value_`i' if urate_value_`i'==. | urate_value_`i'==0 // missing or zero
-			summ urate_value_`i' if ((!inrange(urate_value_`i', 0.05, 2)) & (!inrange(urate_value_`i', 50, 2000)) & urate_value_`i'!=. & urate_value_`i'!=0) // not missing or zero or in above ranges	
-			replace urate_value_`i' = . if ((!inrange(urate_value_`i', 0.05, 2)) & (!inrange(urate_value_`i', 50, 2000))) // keep values that are consistent with mmol/L or micromol/L
-			replace urate_value_`i' = (urate_value_`i'*1000) if inrange(urate_value_`i', 0.05, 2) //x1000 for values that are consistent with mmol/L or micromol/L
-	*/
+			****Review values according to likely units
+			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
+			summ urate_value_`i' if inrange(urate_value_`i', 0.05, 2)
+			summ urate_value_`i' if inrange(urate_value_`i', 2, 50)
+			summ urate_value_`i' if inrange(urate_value_`i', 50, 3000)
+
+			****Remove values consistent with neither mmol/L nor micromol/L
+			replace urate_value_`i' = . if !inrange(urate_value_`i', 0.05, 2) & !inrange(urate_value_`i', 50, 3000)
+			replace urate_date_`i' = . if missing(urate_value_`i')
+
+			****Convert mmol/L to micromol/L
+			replace urate_value_`i' = (urate_value_`i' * 1000) if inrange(urate_value_`i', 0.05, 2)
+
+			****Review values
+			codebook urate_value_`i'
+			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
+		}
+	}
+	log off
 
 	***Reshape to long format
 	reshape long `blood'_value_ `blood'_date_, i(patient_id) j(`blood'_order)
@@ -1221,7 +1237,7 @@ lab var urate_before_ult_value "Baseline serum urate level before initiating ULT
 sort patient_id urate_before_ult_value
 by patient_id: replace urate_before_ult_value = urate_before_ult_value[_n-1] if missing(urate_before_ult_value)
 tabstat urate_before_ult_value, stats(n mean sd p50 p25 p75)
-drop n time_urate_before_ult
+drop n time_urate_before_ult urate_before_ult
 
 reshape wide urate_value_ urate_date_, i(patient_id) j(urate_order)
 
