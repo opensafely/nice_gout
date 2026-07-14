@@ -54,7 +54,7 @@ age_band = case(
 )
 
 measures = create_measures()
-measures.configure_dummy_data(population_size=5000, legacy=True)
+measures.configure_dummy_data(population_size=10000, legacy=True)
 measures.configure_disclosure_control(enabled=False)
 measures.define_defaults(intervals=months(intervals).starting_on(measure_start_date))
 
