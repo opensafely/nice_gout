@@ -12,7 +12,6 @@ USER-INSTALLED ADO:
 *Set filepaths
 /*
 global projectdir "C:\Users\k1754142\OneDrive\PhD Project\OpenSAFELY NICE\nice_gout"
-global projectdir "C:\Users\Mark\OneDrive\PhD Project\OpenSAFELY NICE\nice_gout"
 global running_locally = 1 // Running on local machine
 */
 
@@ -165,10 +164,19 @@ di "`outpatients_ref_before'"
 local outpatients_opa_before ${outpatients}_opa_before
 di "`outpatients_opa_before'"
 
-**Process catergorical outcomes of interest
-foreach outcome of varlist has_12m_fup has_6m_fup `outpatients_opa_before' `outpatients_ref_before' ult_risk_bl sglt2_bl ace_arb_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
+**Process catergorical outcomes of interest (other than outpatient-based variables)
+foreach outcome of varlist has_12m_fup has_6m_fup ult_risk_bl sglt2_bl ace_arb_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
     rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
 }
+
+**Process OPA outcomes only from July 2019 onwards
+preserve
+    keep if ${disease}_moyear >= tm(2019m7)
+
+    foreach outcome of varlist `outpatients_opa_before' `outpatients_ref_before' {
+        rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
+    }
+restore
 
 **Process continuous outcomes of interest
 foreach outcome of varlist `blood_vars_value_bl' age {
@@ -188,7 +196,7 @@ local cohort "postdiagnosis"
 foreach t in 12 {
 	
 	**Erase any existing data file
-	capture erase "$projectdir/output/data/summary_table_`t'`cohort'.dta"
+	capture erase "$projectdir/output/data/summary_table_`t'm`cohort'.dta"
 	
 	**Load processed dataset
 	use "$projectdir/output/data/cohort_processed.dta", clear
@@ -206,19 +214,28 @@ foreach t in 12 {
 	local outpatients_refopa_`t'm ${outpatients}_refopa_`t'm
 	di "`outpatients_refopa_`t'm'"
 
-	**Process catergorical outcomes of interest
-	foreach outcome of varlist `blood_vars_`t'm' `outpatients_refopa_`t'm' febuxostat_`t'm allopurinol_`t'm ult_first_drug_`t'm has_`t'm_fup_ult ult_cat_`t'm ult_`t'm urate_300_`t'm_cat urate_360_`t'm_cat two_urate_`t'm urate_`t'm {
-		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'`cohort'.dta")
+	**Process catergorical outcomes of interest (other than outpatient-based variables)
+	foreach outcome of varlist `blood_vars_`t'm' febuxostat_`t'm allopurinol_`t'm ult_first_drug_`t'm has_`t'm_fup_ult ult_cat_`t'm ult_`t'm urate_300_`t'm_cat urate_360_`t'm_cat two_urate_`t'm urate_`t'm {
+		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
 	}
+	
+	**Process OPA outcome only from July 2019 onwards
+	preserve
+	
+		keep if ${disease}_moyear >= tm(2019m7)
+		
+		rounded_categorical `outpatients_refopa_`t'm', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
+	
+	restore
 
 	**Process continuous outcomes of interest
 	foreach outcome of varlist urate_count_`t'm lowest_urate_`t'm {
-		rounded_continuous `outcome', outfile("$projectdir/output/data/summary_table_`t'`cohort'.dta")
+		rounded_continuous `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
 	}
 	
 	**Export to CSV
-	use "$projectdir/output/data/summary_table_`t'`cohort'.dta", clear
-	export delimited using "$projectdir/output/tables/summary_table_`t'`cohort'.csv", datafmt replace
+	use "$projectdir/output/data/summary_table_`t'm`cohort'.dta", clear
+	export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
 }
 
 *Summary table of disease-specific events occurring within 6/12m of ULT initiation ========================*

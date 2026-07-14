@@ -47,7 +47,7 @@ if $running_locally ==0 {
 
 if $running_locally ==1 {
 	global disease "gout"
-	global studyfup_date "2025-12-31"
+	global studyfup_date "2026-06-30"
 }
 di "$disease"
 

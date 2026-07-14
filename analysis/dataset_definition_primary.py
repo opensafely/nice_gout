@@ -233,47 +233,47 @@ for disease_feature in disease_features_list:
     disease_feature_codelist = getattr(codelists, f"{disease_feature}_codes")
     dataset.add_column(f"{disease_feature}_date", code_before_studyend(disease_feature_codelist).first_for_patient().date)
 
-# Disease-related clinical events: first 10 [specify] events after diagnosis, separated by at least 14 [specify] days
+# Disease-related clinical events: first X [specify] events after diagnosis, separated by at least 14 [specify] days
 for event in events_list:
     event_codelist = getattr(codelists, f"{event}_codes")
     anchor = dx_date
-    for i in range(1, 10 + 1):
+    for i in range(1, 50 + 1):
         event_date = recurrent_events(event_codelist, anchor, 14).date
         dataset.add_column(f"{event}_date_{i}", event_date)
         anchor = event_date
 
-# Recurrent primary diagnosis codes/consults: first 10 [specify] recorded diagnostic codes after diagnosis, separated by at least 1 [specify] days
+# Recurrent primary diagnosis codes/consults: first X [specify] recorded diagnostic codes after diagnosis, separated by at least 1 [specify] days
 primarydx_codelist = getattr(codelists, f"{primary_disease}_snomed")
 anchor = dx_date
-for i in range(1, 10 + 1):
+for i in range(1, 50 + 1):
     consult_date = recurrent_events(primarydx_codelist, anchor, 1).date
     dataset.add_column(f"{primary_disease}_cons_date_{i}", consult_date)
     anchor = consult_date        
 
-# Disease-related admission events: first 10 [specify] events after diagnosis, separated by at least 14 [specify] days
+# Disease-related admission events: first X [specify] events after diagnosis, separated by at least 14 [specify] days
 for diagnosis in admissions_list:
     admission_codelist = getattr(codelists, f"{diagnosis}_admission_codes")
     admission_codelist = expand_three_char_icd10_codes(admission_codelist)   
     anchor = dx_date
-    for i in range(1, 10 + 1):
+    for i in range(1, 50 + 1):
         admission_date = admission_events(admission_codelist, anchor, 14).admission_date
         dataset.add_column(f"{diagnosis}_adm_date_{i}", admission_date)
         anchor = admission_date
 
-# Disease-related emergency department attendances: first 10 [specify] events after diagnosis, separated by at least 14 [specify] days
+# Disease-related emergency department attendances: first X [specify] events after diagnosis, separated by at least 14 [specify] days
 for diagnosis in admissions_list:
     emergency_codelist = getattr(codelists, f"{diagnosis}_snomed")
     anchor = dx_date
-    for i in range(1, 10 + 1):
+    for i in range(1, 50 + 1):
         emergency_date = ed_attendance_events(emergency_codelist, anchor, 14).arrival_date
         dataset.add_column(f"{diagnosis}_ed_date_{i}", emergency_date)
         anchor = emergency_date    
 
-# Blood tests: first 10 [specify] recorded blood tests from 24 [specify] months before diagnosis date
+# Blood tests: first X [specify] recorded blood tests from 24 [specify] months before diagnosis date
 for blood in bloods_list:
     blood_codelist = getattr(codelists, f"{blood}_codes")
     anchor = (dx_date - months(24))
-    for i in range(1, 10 + 1):
+    for i in range(1, 50 + 1):
         blood_event = recurrent_bloods(blood_codelist, anchor)
         dataset.add_column(f"{blood}_value_{i}", blood_event.numeric_value)
         dataset.add_column(f"{blood}_date_{i}", blood_event.date)
@@ -291,9 +291,9 @@ for medication in medications_list:
     ## Count of prescriptions within X (specify) months after diagnosis
     dataset.add_column(f"{medication}_count_6m", medication_count(medication_codelist, 6))
     dataset.add_column(f"{medication}_count_12m", medication_count(medication_codelist, 12))
-    ## First 10 [specify] prescriptions after diagnosis, separated by at least 1 [specify] day; do further cleaning later in pipeline
+    ## First X [specify] prescriptions after diagnosis, separated by at least 1 [specify] day; do further cleaning later in pipeline
     anchor = dx_date
-    for i in range(1, 10 + 1):
+    for i in range(1, 50 + 1):
         med_date = recurrent_meds(medication_codelist, anchor, 1).date
         dataset.add_column(f"{medication}_date_{i}", med_date)
         anchor = med_date

@@ -15,7 +15,7 @@ outpatients = "rheumatology"
 # Define study period dates
 studystart_date = "2016-07-01"
 studyend_date = "2025-06-30"
-studyfup_date = "2025-12-31"
+studyfup_date = "2026-06-30"
 
 # Measure disease incidence (yes or no)
 incidence = "yes"
@@ -124,7 +124,7 @@ if incidence == "yes":
 yaml_body = ""
 all_needs = []
 
-# Monthly intervals calculated for each study year
+# Monthly intervals calculated for each study year (change these dates if study months change)
 for year in range(start_year, end_year):
     win_start = date(year, 7, 1)
     win_end = date(year + 1, 6, 30)

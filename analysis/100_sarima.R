@@ -106,8 +106,23 @@ for (j in 1:length(disease_list)) {
     
     dis_title <- str_to_title(str_replace_all(dis, "_", " "))
     
-    # Convert to time series object 
-    df_obs_rate <- ts(df_obs[[var]], frequency=12, start=start)
+    # Check pre-intervention series is complete
+    series_values <- as.numeric(df_obs[[var]])
+    
+    if (length(series_values) == 0 || any(!is.finite(series_values))) {
+      message(
+        "Skipping ", dis, " / ", var,
+        ": no complete pre-intervention series."
+      )
+      next
+    }
+    
+    # Convert to time series object
+    df_obs_rate <- ts(series_values, frequency = 12, start = start)
+    assign(paste0("ts_", var), df_obs_rate)
+    
+    # Convert to time series object
+    df_obs_rate <- ts(series_values, frequency = 12, start=start)
     assign(paste0("ts_", var), df_obs_rate)
     
     # Plot time series for raw data; 1st order difference; 1st order seasonal difference
@@ -584,7 +599,6 @@ for (j in 1:length(disease_list)) {
   }
 }    
 
-dev.off()
 graphics.off()
 sink()
 

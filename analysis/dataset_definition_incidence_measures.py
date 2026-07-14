@@ -133,16 +133,6 @@ measures.define_measure(
     },
 )
 
-# Incidence by IMD quintile (latest) - sense check; remove later
-measures.define_measure(
-    name=disease + "_inc_imd_latest",
-    numerator=incidence_numerators[disease + "_inc_num"],
-    denominator=incidence_denominators[disease + "_inc_denom"],
-    group_by={
-        "imd1": dataset.imd_quintile_latest,
-    },
-)
-
 # Incidence by IMD quintile (at interval start)
 measures.define_measure(
     name=disease + "_inc_imd",
@@ -172,5 +162,35 @@ measures.define_measure(
     group_by={
         "sex": dataset.sex,
         "age": age_band,  
+    },
+)
+
+# Prevalence by ethnicity
+measures.define_measure(
+    name=disease + "_prev_ethn",
+    numerator=prev_numerators[disease + "_prev_num"],
+    denominator=prev_denominator,
+    group_by={
+        "ethnicity": dataset.ethnicity,
+    },
+)
+
+# Prevalence by IMD quintile (at interval start)
+measures.define_measure(
+    name=disease + "_prev_imd",
+    numerator=prev_numerators[disease + "_prev_num"],
+    denominator=prev_denominator,
+    group_by={
+        "imd": imd_quintile_int,
+    },
+)
+
+# Prevalence by region (at interval start)
+measures.define_measure(
+    name=disease + "_prev_region",
+    numerator=prev_numerators[disease + "_prev_num"],
+    denominator=prev_denominator,
+    group_by={
+        "region": region_int,
     },
 )

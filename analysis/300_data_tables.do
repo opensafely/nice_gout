@@ -193,9 +193,30 @@ foreach t in 12 {
 	**Store list of additional variables of interest
 	*local outpatients_refopa_`t'm ${outpatients}_refopa_`t'm
 	local outpatients_refopa_`t'm_risk ${outpatients}_refopa_`t'm_risk
+	
+	**Outpatient appointment outcomes only (OPA data available from July 2019 onwards)
+	preserve
 
-	**Loop through outcomes of interest for full cohort (have to be binary variables: yes 1 and no 0)
-	foreach var of varlist `outpatients_refopa_`t'm_risk' chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m creatinine_within_`t'm hba1c_within_`t'm cholesterol_within_`t'm ult_`t'm {
+		keep if `time_variable' >= tm(2019m7)
+
+		foreach var of varlist `outpatients_refopa_`t'm_risk' {
+			rounded_datatable `var', timevar(`time_variable')
+		}
+
+		foreach demog_var of varlist $demographic {
+
+			local demog_variable "`demog_var'"
+			di "`demog_variable'"
+			
+			foreach var of varlist `outpatients_refopa_`t'm_risk' {
+				rounded_datatable_demog `var', timevar(`time_variable') demogvar(`demog_variable')
+			}
+		}
+
+	restore
+
+	**Loop through all other outcomes of interest for full cohort (have to be binary variables: yes 1 and no 0)
+	foreach var of varlist chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m creatinine_within_`t'm hba1c_within_`t'm cholesterol_within_`t'm ult_`t'm {
 		rounded_datatable `var', timevar(`time_variable')
 	}
 	
@@ -206,7 +227,7 @@ foreach t in 12 {
 		di "`demog_variable'"
 
 		**Loop through outcomes of interest by demography
-		foreach var of varlist `outpatients_refopa_`t'm_risk' chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m creatinine_within_`t'm hba1c_within_`t'm cholesterol_within_`t'm ult_`t'm {
+		foreach var of varlist chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m creatinine_within_`t'm hba1c_within_`t'm cholesterol_within_`t'm ult_`t'm {
 			rounded_datatable_demog `var', timevar(`time_variable') demogvar(`demog_variable')
 		}
 	}
@@ -237,7 +258,7 @@ foreach t in 12 {
 	local time_variable "ult_first_date_my"
 
 	**Loop through outcomes of interest for full cohort (have to be binary variables: yes 1 and no 0)
-	foreach var of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm ult_high repeat_below360_`t'm_ult repeat_after360_`t'm_ult ult_prophylaxis urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult {
+	foreach var of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm ult_high repeat_below360_`t'm_ult repeat_after360_`t'm_ult ult_prophylaxis_2 ult_prophylaxis urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult {
 		rounded_datatable `var', timevar(`time_variable')
 	}
 	
@@ -248,7 +269,7 @@ foreach t in 12 {
 		di "`demog_variable'"
 
 		**Loop through outcomes of interest by demography
-		foreach var of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm ult_high repeat_below360_`t'm_ult repeat_after360_`t'm_ult ult_prophylaxis_`t'm urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult {
+		foreach var of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm ult_high repeat_below360_`t'm_ult repeat_after360_`t'm_ult ult_prophylaxis_2 ult_prophylaxis urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult {
 			rounded_datatable_demog `var', timevar(`time_variable') demogvar(`demog_variable')
 		}
 	}
@@ -414,7 +435,7 @@ foreach t in 12 {
 	local time_variable "first_flare_date_my"
 	
 	**Set inclusion criteria - limited to those who had at least 12 months of follow-up after first flare date
-	keep if has_`t'm_fup_flare==1
+	keep if has_`t'm_fup_flare==1 //may not need 12 months
 
 	**Loop through outcomes of interest for full cohort (have to be binary variables: yes 1 and no 0)
 	foreach var of varlist post_flare_urate {

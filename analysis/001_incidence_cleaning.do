@@ -117,25 +117,36 @@ gen measure_prev = 1 if substr(measure,-11,.) == "_prevalence"
 recode measure_prev .=0
 
 **Code IMD and ethnicity measures
-gen measure_imd = 1 if substr(measure,-4,.) == "_imd"
-recode measure_imd .=0
-gen measure_ethnicity = 1 if substr(measure,-5,.) == "_ethn"
-recode measure_ethnicity .=0
+gen measure_inc_imd = 1 if substr(measure,-7,.) == "inc_imd"
+recode measure_inc_imd .=0
+gen measure_inc_ethnicity = 1 if substr(measure,-8,.) == "inc_ethn"
+recode measure_inc_ethnicity .=0
+gen measure_prev_imd = 1 if substr(measure,-8,.) == "prev_imd"
+recode measure_prev_imd .=0
+gen measure_prev_ethnicity = 1 if substr(measure,-9,.) == "prev_ethn"
+recode measure_prev_ethnicity .=0
 
 **Code region measures
-gen measure_region = 1 if substr(measure,-7,.) == "_region"
-recode measure_region .=0
+gen measure_inc_region = 1 if substr(measure,-10,.) == "inc_region"
+recode measure_inc_region .=0
+gen measure_prev_region = 1 if substr(measure,-11,.) == "prev_region"
+recode measure_prev_region .=0
 
-**Code any incidence measures
-gen measure_inc_any = 1 if measure_inc ==1 | measure_imd==1 | measure_ethnicity==1 | measure_region==1
+**Code any incidence and prevalence measures
+gen measure_inc_any = 1 if measure_inc ==1 | measure_inc_imd==1 | measure_inc_ethnicity==1 | measure_inc_region==1
 recode measure_inc_any .=0
+gen measure_prev_any = 1 if measure_prev ==1 | measure_prev_imd==1 | measure_prev_ethnicity==1 | measure_prev_region==1
+recode measure_prev_any .=0
 
 **Label diseases 
 gen diseases_ = substr(measure, 1, strlen(measure) - 10) if measure_inc==1
 replace diseases_ = substr(measure, 1, strlen(measure) - 11) if measure_prev==1
-replace diseases_ = substr(measure, 1, strlen(measure) - 8) if measure_imd==1
-replace diseases_ = substr(measure, 1, strlen(measure) - 9) if measure_ethnicity==1
-replace diseases_ = substr(measure, 1, strlen(measure) - 11) if measure_region==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 8) if measure_inc_imd==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 9) if measure_inc_ethnicity==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 11) if measure_inc_region==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 9) if measure_prev_imd==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 10) if measure_prev_ethnicity==1
+replace diseases_ = substr(measure, 1, strlen(measure) - 12) if measure_prev_region==1
 rename diseases_ disease
 gen disease_full = strproper(subinstr(disease, "_", " ",.))
 order disease_full, after(disease)
@@ -173,12 +184,12 @@ gen rate_male = (numerator_male/denominator_male) if (numerator_male!=. & denomi
 replace rate_male =. if (numerator_male==. | denominator_male==.)
 gen rate_male_100000 = rate_male*100000
 
-sort disease mo_year_diagn measure_prev measure_inc_any rate_male_100000 
-by disease mo_year_diagn measure_prev measure_inc_any (rate_male_100000): replace rate_male_100000 = rate_male_100000[_n-1] if missing(rate_male_100000)
-sort disease mo_year_diagn measure_prev measure_inc_any numerator_male 
-by disease mo_year_diagn measure_prev measure_inc_any (numerator_male): replace numerator_male = numerator_male[_n-1] if missing(numerator_male)
-sort disease mo_year_diagn measure_prev measure_inc_any denominator_male 
-by disease mo_year_diagn measure_prev measure_inc_any (denominator_male): replace denominator_male = denominator_male[_n-1] if missing(denominator_male)
+sort disease mo_year_diagn measure_prev_any measure_inc_any rate_male_100000 
+by disease mo_year_diagn measure_prev_any measure_inc_any (rate_male_100000): replace rate_male_100000 = rate_male_100000[_n-1] if missing(rate_male_100000)
+sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_male 
+by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_male): replace numerator_male = numerator_male[_n-1] if missing(numerator_male)
+sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_male 
+by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_male): replace denominator_male = denominator_male[_n-1] if missing(denominator_male)
 
 **For females
 bys disease mo_year_diagn measure: egen numerator_female = sum(numerator) if sex=="female"
@@ -195,12 +206,12 @@ gen rate_female = (numerator_female/denominator_female) if (numerator_female!=. 
 replace rate_female =. if (numerator_female==. | denominator_female==.)
 gen rate_female_100000 = rate_female*100000
 
-sort disease mo_year_diagn measure_prev measure_inc_any rate_female_100000 
-by disease mo_year_diagn measure_prev measure_inc_any (rate_female_100000): replace rate_female_100000 = rate_female_100000[_n-1] if missing(rate_female_100000)
-sort disease mo_year_diagn measure_prev measure_inc_any numerator_female 
-by disease mo_year_diagn measure_prev measure_inc_any (numerator_female): replace numerator_female = numerator_female[_n-1] if missing(numerator_female)
-sort disease mo_year_diagn measure_prev measure_inc_any denominator_female 
-by disease mo_year_diagn measure_prev measure_inc_any (denominator_female): replace denominator_female = denominator_female[_n-1] if missing(denominator_female)
+sort disease mo_year_diagn measure_prev_any measure_inc_any rate_female_100000 
+by disease mo_year_diagn measure_prev_any measure_inc_any (rate_female_100000): replace rate_female_100000 = rate_female_100000[_n-1] if missing(rate_female_100000)
+sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_female 
+by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_female): replace numerator_female = numerator_female[_n-1] if missing(numerator_female)
+sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_female 
+by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_female): replace denominator_female = denominator_female[_n-1] if missing(denominator_female)
 
 **For age groups (18+); if including 0-18, need to amend below and dataset definitions
 replace age = "80" if age == "age_greater_equal_80"
@@ -221,12 +232,12 @@ foreach var in 18_29 30_39 40_49 50_59 60_69 70_79 80 {
 	replace rate_`var' =. if (numerator_`var'==. | denominator_`var'==.)
 	gen rate_`var'_100000 = rate_`var'*100000
 
-	sort disease mo_year_diagn measure_prev measure_inc_any rate_`var'_100000 
-	by disease mo_year_diagn measure_prev measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
-	sort disease mo_year_diagn measure_prev measure_inc_any numerator_`var'
-	by disease mo_year_diagn measure_prev measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
-	sort disease mo_year_diagn measure_prev measure_inc_any denominator_`var' 
-	by disease mo_year_diagn measure_prev measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any rate_`var'_100000 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
+	sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_`var'
+	by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_`var' 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
 }
 
 **For ethnicity
@@ -260,12 +271,12 @@ foreach var in white mixed black asian other ethunk {
 	replace rate_`var' =. if (numerator_`var'==. | denominator_`var'==.)
 	gen rate_`var'_100000 = rate_`var'*100000
 
-	sort disease mo_year_diagn measure_prev measure_inc_any rate_`var'_100000 
-	by disease mo_year_diagn measure_prev measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
-	sort disease mo_year_diagn measure_prev measure_inc_any numerator_`var'
-	by disease mo_year_diagn measure_prev measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
-	sort disease mo_year_diagn measure_prev measure_inc_any denominator_`var' 
-	by disease mo_year_diagn measure_prev measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any rate_`var'_100000 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
+	sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_`var'
+	by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_`var' 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
 }
 
 *For IMD
@@ -299,12 +310,12 @@ foreach var in imd1 imd2 imd3 imd4 imd5 imdunk {
 	replace rate_`var' =. if (numerator_`var'==. | denominator_`var'==.)
 	gen rate_`var'_100000 = rate_`var'*100000
 
-	sort disease mo_year_diagn measure_prev measure_inc_any rate_`var'_100000 
-	by disease mo_year_diagn measure_prev measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
-	sort disease mo_year_diagn measure_prev measure_inc_any numerator_`var'
-	by disease mo_year_diagn measure_prev measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
-	sort disease mo_year_diagn measure_prev measure_inc_any denominator_`var' 
-	by disease mo_year_diagn measure_prev measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any rate_`var'_100000 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
+	sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_`var'
+	by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_`var' 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
 }
 
 *For Region
@@ -350,12 +361,12 @@ foreach var in east eastmid london northeast northwest southeast southwest westm
 	replace rate_`var' =. if (numerator_`var'==. | denominator_`var'==.)
 	gen rate_`var'_100000 = rate_`var'*100000
 
-	sort disease mo_year_diagn measure_prev measure_inc_any rate_`var'_100000 
-	by disease mo_year_diagn measure_prev measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
-	sort disease mo_year_diagn measure_prev measure_inc_any numerator_`var'
-	by disease mo_year_diagn measure_prev measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
-	sort disease mo_year_diagn measure_prev measure_inc_any denominator_`var' 
-	by disease mo_year_diagn measure_prev measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any rate_`var'_100000 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (rate_`var'_100000): replace rate_`var'_100000 = rate_`var'_100000[_n-1] if missing(rate_`var'_100000)
+	sort disease mo_year_diagn measure_prev_any measure_inc_any numerator_`var'
+	by disease mo_year_diagn measure_prev_any measure_inc_any (numerator_`var'): replace numerator_`var' = numerator_`var'[_n-1] if missing(numerator_`var')
+	sort disease mo_year_diagn measure_prev_any measure_inc_any denominator_`var' 
+	by disease mo_year_diagn measure_prev_any measure_inc_any (denominator_`var'): replace denominator_`var' = denominator_`var'[_n-1] if missing(denominator_`var')
 }
 
 save "$projectdir/output/data/processed_nonstandardised.dta", replace
