@@ -490,6 +490,7 @@ foreach t in 6 12 {
 	****First drug prescribed within 6/12m after diagnosis
 	gen `drug'_first_drug_`t'm = `drug'_first_drug if (`drug'_first_date <= (${disease}_inc_date + `days')) & `drug'_first_date!=.
 	lab var `drug'_first_drug_`t'm "First prescribed `Drug' drug within `t' months of diagnosis"
+	label values `drug'_first_drug_`t'm `drug'_first_drug
 	tab `drug'_first_drug_`t'm, missing
 
 	****Proportion of patients with at least 6/12 months of GP registration after first prescription - can subsequently limit this to those who initiated within 6/12m of diagnosis 
