@@ -237,7 +237,7 @@ for disease_feature in disease_features_list:
 for event in events_list:
     event_codelist = getattr(codelists, f"{event}_codes")
     anchor = dx_date
-    for i in range(1, 50 + 1):
+    for i in range(1, 10 + 1):
         event_date = recurrent_events(event_codelist, anchor, 14).date
         dataset.add_column(f"{event}_date_{i}", event_date)
         anchor = event_date
@@ -245,7 +245,7 @@ for event in events_list:
 # Recurrent primary diagnosis codes/consults: first X [specify] recorded diagnostic codes after diagnosis, separated by at least 1 [specify] days
 primarydx_codelist = getattr(codelists, f"{primary_disease}_snomed")
 anchor = dx_date
-for i in range(1, 50 + 1):
+for i in range(1, 10 + 1):
     consult_date = recurrent_events(primarydx_codelist, anchor, 1).date
     dataset.add_column(f"{primary_disease}_cons_date_{i}", consult_date)
     anchor = consult_date        
@@ -255,7 +255,7 @@ for diagnosis in admissions_list:
     admission_codelist = getattr(codelists, f"{diagnosis}_admission_codes")
     admission_codelist = expand_three_char_icd10_codes(admission_codelist)   
     anchor = dx_date
-    for i in range(1, 50 + 1):
+    for i in range(1, 10 + 1):
         admission_date = admission_events(admission_codelist, anchor, 14).admission_date
         dataset.add_column(f"{diagnosis}_adm_date_{i}", admission_date)
         anchor = admission_date
@@ -264,7 +264,7 @@ for diagnosis in admissions_list:
 for diagnosis in admissions_list:
     emergency_codelist = getattr(codelists, f"{diagnosis}_snomed")
     anchor = dx_date
-    for i in range(1, 50 + 1):
+    for i in range(1, 10 + 1):
         emergency_date = ed_attendance_events(emergency_codelist, anchor, 14).arrival_date
         dataset.add_column(f"{diagnosis}_ed_date_{i}", emergency_date)
         anchor = emergency_date    
@@ -273,7 +273,7 @@ for diagnosis in admissions_list:
 for blood in bloods_list:
     blood_codelist = getattr(codelists, f"{blood}_codes")
     anchor = (dx_date - months(24))
-    for i in range(1, 50 + 1):
+    for i in range(1, 20 + 1):
         blood_event = recurrent_bloods(blood_codelist, anchor)
         dataset.add_column(f"{blood}_value_{i}", blood_event.numeric_value)
         dataset.add_column(f"{blood}_date_{i}", blood_event.date)
