@@ -38,7 +38,7 @@ def preceding_registration(dx_date):
 
 def create_dataset_with_variables():
     dataset = create_dataset()
-    dataset.configure_dummy_data(population_size=10000)
+    dataset.configure_dummy_data(population_size=5000)
 
     # Incident diagnostic code in primary care record (SNOMED), assuming before study end date
     def first_code_in_period_snomed(dx_codelist):
