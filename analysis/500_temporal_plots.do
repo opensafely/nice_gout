@@ -49,7 +49,7 @@ if $running_locally ==1 {
 	global demographic "agegroup sex ethnicity imd region"
 	global studystart_date "2016-07-01"
 	global studyend_date "2025-06-30"
-	global studyfup_date "2025-12-31"
+	global studyfup_date "2026-06-30"
 	global intervention_date_2 "2022-06-01"
 }
 
@@ -149,7 +149,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 		local outcome_desc = outcome_desc
 
 		***Temporal plot over study period (scatter with moving average)
-		twoway scatter prop month_year, ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line prop_ma month_year, lcolor(emerald) lstyle(solid) ylabel(, `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
+		twoway scatter prop month_year, ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line prop_ma month_year, lcolor(emerald) lstyle(solid) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
 		graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.$img", replace
 
 		**ITSA graphs
@@ -253,14 +253,14 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			predict yhat if e(sample)
 
 			****Plot observed and fitted lines
-			twoway scatter prop month_year if e(sample), ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line yhat month_year if e(sample) & month_year<$intervention, lcolor(emerald) lstyle(solid) || line yhat month_year if e(sample) & month_year>=$intervention, lcolor(emerald) lstyle(solid) ylabel(, `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) ///
+			twoway scatter prop month_year if e(sample), ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line yhat month_year if e(sample) & month_year<$intervention, lcolor(emerald) lstyle(solid) || line yhat month_year if e(sample) & month_year>=$intervention, lcolor(emerald) lstyle(solid) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) ///
 			graphregion(margin(r=20)) plotregion(margin(r=15)) ///
 			text(`ybox' `xbox' `boxlines', place(e) just(left) box bcolor(white) margin(small) size(small)) ///
 			name("`outcome'", replace)
 			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
 			
 		/*  itsa prop if inrange(month_year, `start', `end'), single trperiod($intervention_tm) lag(5) replace posttrend  ///
-			figure(xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(1)) xlabel(`xlabel', nogrid labsize(small) axis(1)) xlabel($intervention "NICE Guideline", axis(2) labsize(small) labcolor(navy)) xtitle("", axis(2)) xscale(noline axis(2)) title("", size(small)) lstyle(dashed) subtitle("", size(medsmall)) ytitle("`ytitle'", size(medsmall) margin(small)) ylabel(, nogrid `format' labsize(small)) note("", size(v.small)) legend(off) name("itsa_`outcome'", replace) ///
+			figure(xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(1)) xlabel(`xlabel', nogrid labsize(small) axis(1)) xlabel($intervention "NICE Guideline", axis(2) labsize(small) labcolor(navy)) xtitle("", axis(2)) xscale(noline axis(2)) title("", size(small)) lstyle(dashed) subtitle("", size(medsmall)) ytitle("`ytitle'", size(medsmall) margin(small)) yscale(range(0 .)) ylabel(0, add nogrid `format' labsize(small)) note("", size(v.small)) legend(off) name("itsa_`outcome'", replace) ///
 			) 
 			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
 		*/
@@ -435,7 +435,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			local gname = substr("`gname'", 1, 32)
 
 			***Build plots
-			twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(, `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
+			twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
 			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.$img", replace
 		}	
 	}	

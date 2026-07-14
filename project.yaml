@@ -8,7 +8,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
     outputs:
       highly_sensitive:
@@ -20,7 +20,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --primary_disease gout
       --diseases_list gout
       --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol
@@ -41,7 +41,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2016-07-01"
@@ -57,7 +57,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2017-07-01"
@@ -73,7 +73,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2018-07-01"
@@ -89,7 +89,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2019-07-01"
@@ -105,7 +105,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2020-07-01"
@@ -121,7 +121,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2021-07-01"
@@ -137,7 +137,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2022-07-01"
@@ -153,7 +153,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2023-07-01"
@@ -169,7 +169,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2024-07-01"
@@ -213,7 +213,7 @@ actions:
       --
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
-      --studyfup_date "2025-12-31"
+      --studyfup_date "2026-06-30"
       --diseases_list gout
       --measure_disease gout
       --measure_start_date "2016-07-01"
@@ -224,7 +224,7 @@ actions:
         measure_csv: output/measures/measures_practice_gout.csv
 
   cohort_cleaning:
-    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2025-12-31" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
+    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [generate_dataset_primary, measures_practice_gout]
     outputs:
       highly_sensitive:
@@ -249,7 +249,7 @@ actions:
         table1: output/tables/summary_table_*.csv
 
   temporal_plots:
-    run: stata-mp:latest analysis/500_temporal_plots.do "gout" "agegroup|sex|ethnicity|imd|region" "2016-07-01" "2025-06-30" "2025-12-31" "2022-06-01"
+    run: stata-mp:latest analysis/500_temporal_plots.do "gout" "agegroup|sex|ethnicity|imd|region" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01"
     needs: [data_tables]
     outputs:
       moderately_sensitive:
@@ -266,7 +266,7 @@ actions:
         table2: output/tables/logistic_summary.csv
 
   # survival_models:
-  #   run: stata-mp:latest analysis/700_survival_models.do "gout" "2025-12-31"
+  #   run: stata-mp:latest analysis/700_survival_models.do "gout" "2026-06-30"
   #   needs: [cohort_cleaning]
   #   outputs:
   #     moderately_sensitive:

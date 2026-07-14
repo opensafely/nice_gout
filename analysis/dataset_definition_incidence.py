@@ -38,8 +38,7 @@ def preceding_registration(dx_date):
 
 def create_dataset_with_variables():
     dataset = create_dataset()
-    dataset.configure_dummy_data(population_size=10000)
-    #dataset.configure_dummy_data(population_size=100000, timeout=500)
+    dataset.configure_dummy_data(population_size=5000)
 
     # Incident diagnostic code in primary care record (SNOMED), assuming before study end date
     def first_code_in_period_snomed(dx_codelist):
@@ -218,18 +217,6 @@ def create_dataset_with_variables():
                 (getattr(dataset, f"{disease}_prev_sec_date", None))
                 ] if date is not None]),
         )
-
-    # IMD at latest address registration - sense check; remove later
-    latest_address_per_patient = addresses.sort_by(addresses.start_date).last_for_patient()
-    imd_rounded_latest = latest_address_per_patient.imd_rounded
-    dataset.imd_quintile_latest = case(
-        when((imd_rounded_latest >= 0) & (imd_rounded_latest < int(32844 * 1 / 5))).then("1 (most deprived)"),
-        when(imd_rounded_latest < int(32844 * 2 / 5)).then("2"),
-        when(imd_rounded_latest < int(32844 * 3 / 5)).then("3"),
-        when(imd_rounded_latest < int(32844 * 4 / 5)).then("4"),
-        when(imd_rounded_latest < int(32844 * 5 / 5)).then("5 (least deprived)"),
-        otherwise="Unknown",
-    )
 
     return dataset
 

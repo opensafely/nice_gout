@@ -47,7 +47,7 @@ if $running_locally ==1 {
 	global disease "gout"
 	global studystart_date "2016-07-01"
 	global studyend_date "2025-06-30"
-	global studyfup_date "2025-12-31"
+	global studyfup_date "2026-06-30"
 	global nice_date "2022-06-01"
 	global demographic "agegroup sex ethnicity imd region"
 	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
@@ -299,20 +299,6 @@ lab var imd "Index of multiple deprivation"
 drop imd_quintile
 tab imd, missing
 
-**Index of multiple deprivation (lastest address) - sense check; remove later
-gen imd_latest = 1 if imd_quintile_latest == "1 (most deprived)"
-replace imd_latest = 2 if imd_quintile_latest == "2"
-replace imd_latest = 3 if imd_quintile_latest == "3"
-replace imd_latest = 4 if imd_quintile_latest == "4"
-replace imd_latest = 5 if imd_quintile_latest == "5 (least deprived)"
-replace imd_latest = 9 if imd_quintile_latest == "Unknown"
-
-label define imd_latest 1 "1 most deprived" 2 "2" 3 "3" 4 "4" 5 "5 least deprived" 9 "Not known", modify
-label val imd_latest imd_latest 
-lab var imd_latest "Index of multiple deprivation"
-drop imd_quintile_latest
-tab imd_latest, missing
-
 **Body Mass Index
 ***Recode values that are more likely to be erroneous
 replace bmi_value = . if !inrange(bmi_value, 10, 80)
@@ -486,11 +472,11 @@ lab val `drug'_year `drug'_year_lbl
 tab `drug'_year, missing
 
 ***What was the first drug prescribed within a class (amend list as necessary)
-gen `drug'_first_d="" if `drug'_first_date!=.
+gen str40 `drug'_first_d="" if `drug'_first_date!=.
 foreach var of varlist allopurinol_first_date febuxostat_first_date benzbromarone_first_date probenecid_first_date {
 	replace `drug'_first_d="`var'" if `drug'_first_date==`var' & `drug'_first_date!=. & `var'!=.
 	}
-gen `drug'_first_drug_s = strproper(substr(`drug'_first_d, 1, strpos(`drug'_first_d, "_") - 1)) if `drug'_first_d!=""  
+gen str40  `drug'_first_drug_s = strproper(substr(`drug'_first_d, 1, strpos(`drug'_first_d, "_") - 1)) if `drug'_first_d!=""  
 encode `drug'_first_drug_s, gen(`drug'_first_drug)
 lab var `drug'_first_drug "First prescribed `Drug' drug"
 tab `drug'_first_drug, missing
@@ -502,11 +488,10 @@ foreach t in 6 12 {
 	di `days'
 	
 	****First drug prescribed within 6/12m after diagnosis
-	gen `drug'_first_drug_`t'm_s = `drug'_first_drug_s if (`drug'_first_date <= (${disease}_inc_date + `days')) & `drug'_first_date!=.
-	encode `drug'_first_drug_`t'm_s, gen(`drug'_first_drug_`t'm)
+	gen `drug'_first_drug_`t'm = `drug'_first_drug if (`drug'_first_date <= (${disease}_inc_date + `days')) & `drug'_first_date!=.
 	lab var `drug'_first_drug_`t'm "First prescribed `Drug' drug within `t' months of diagnosis"
+	label values `drug'_first_drug_`t'm `drug'_first_drug
 	tab `drug'_first_drug_`t'm, missing
-	drop `drug'_first_drug_`t'm_s
 
 	****Proportion of patients with at least 6/12 months of GP registration after first prescription - can subsequently limit this to those who initiated within 6/12m of diagnosis 
 	gen has_`t'm_fup_`drug'=1 if (reg_end_date!=. & (reg_end_date >= (`drug'_first_date + `days')) & ((`drug'_first_date + `days') <= (date("$studyfup_date", "YMD")))) | (reg_end_date==. & ((`drug'_first_date + `days') <= (date("$studyfup_date", "YMD"))))
@@ -538,6 +523,7 @@ foreach var of varlist allopurinol_high_first_date febuxostat_high_first_date {
 	tab `drug'_high, missing
 
 ***Prescriptions for individual drugs within class within a timeframe after diagnosis (amend list as necessary)
+
 foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 	if "`med'" == "`drug'" {
 		local druglabel = "`Drug'" 
@@ -550,22 +536,43 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 	gen `med'_ever = 1 if `med'_first_date!=. 
 	recode `med'_ever .=0
 	lab var `med'_ever "Ever prescribed `druglabel'"
-	lab define `med'_ever 0 "No" 1 "Yes"
+	lab define `med'_ever 0 "No" 1 "Yes", replace
 	lab val `med'_ever `med'_ever
-
+		
 	***Was prophylaxis prescribed on same day at first ULT drug - Nb. restricted to first initiation of each ULT drug
 	gen `med'_prophylaxis = .
+	gen `med'_prophylaxis_2 = .
+	
 	forval i = 1/$max_prescription {
 		display $max_prescription
 		display `i'
-	    replace `med'_prophylaxis = 1 if (`med'_first_date == colchicine_date_`i') & colchicine_date_`i'!=. & `med'_first_date!=.
+		
+	    ****Same day prophylaxis
+		replace `med'_prophylaxis = 1 if (`med'_first_date == colchicine_date_`i') & colchicine_date_`i'!=. & `med'_first_date!=.
 		replace `med'_prophylaxis = 1 if (`med'_first_date == nsaid_date_`i') & nsaid_date_`i'!=. & `med'_first_date!=.
 		replace `med'_prophylaxis = 1 if (`med'_first_date == steroid_date_`i') & steroid_date_`i'!=. & `med'_first_date!=.
+		
+		****+/- 3 days day prophylaxis
+		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - colchicine_date_`i') <= 3) & colchicine_date_`i'!=. & `med'_first_date!=.
+		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - nsaid_date_`i') <= 3) & nsaid_date_`i'!=. & `med'_first_date!=.
+		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - steroid_date_`i') <= 3) & steroid_date_`i'!=. & `med'_first_date!=.
 	}
+	
 	recode `med'_prophylaxis .=0 if `med'_first_date !=.
 	lab var `med'_prophylaxis "Prophylaxis prescribed at same time as ULT initiation"
-	lab define `med'_prophylaxis 0 "No" 1 "Yes"
+	lab define `med'_prophylaxis 0 "No" 1 "Yes", replace
 	lab val `med'_prophylaxis `med'_prophylaxis
+	
+	recode `med'_prophylaxis_2 .=0 if `med'_first_date !=.
+	lab var `med'_prophylaxis_2 "Prophylaxis prescribed within 3 days of ULT initiation"
+	lab define `med'_prophylaxis_2 0 "No" 1 "Yes", replace
+	lab val `med'_prophylaxis_2 `med'_prophylaxis_2
+
+	***Check - remove later
+	log on
+	tab `med'_prophylaxis
+	tab `med'_prophylaxis_2
+	log off
 
 	****Time from diagnosis to first prescription
 	gen time_to_`med' = (`med'_first_date - ${disease}_inc_date) if `med'_first_date!=.
@@ -997,8 +1004,8 @@ lab define urate_bl_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", 
 lab val urate_bl_cat urate_bl_cat
 tab urate_bl_cat, missing
 
-**If baseline urate level <360, check whether repeat test was performed within 1 month of diagnosis (or within 1 month of test if this was up to 1 month after diagnosis)
-gen urate_bl_360_repeat = 0 if urate_bl_cat==2
+**If baseline urate level <360, check whether repeat test was performed within 3 months
+gen urate_bl_360_repeat = 0 if urate_bl_cat==1
 
 ***Find max number of urate levels
 local max = 0
@@ -1015,7 +1022,7 @@ di "`max'"
 
 ***Find matching urate levels within 3 months after baseline urate (if baseline <360)
 forval i = 1/`max'	{
-	replace urate_bl_360_repeat = 1 if urate_bl_cat==2 & ((urate_date_`i' > urate_bl_date) & (urate_date_`i' <= (urate_bl_date + 90)) & urate_date_`i'!=.)
+	replace urate_bl_360_repeat = 1 if urate_bl_cat==1 & ((urate_date_`i' > urate_bl_date) & (urate_date_`i' <= (urate_bl_date + 90)) & urate_date_`i'!=.)
 }
 lab var urate_bl_360_repeat "Repeat urate level within three months if baseline urate <360"
 lab def urate_bl_360_repeat 0 "No" 1 "Yes"
@@ -1140,8 +1147,8 @@ foreach t in 6 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
-	***For those who attained serum urate target (at any point), was urate repeated after 12 months (between 6 and 18 months afterwards) - can then limit this to a timeframe after ULT initiation
-	gen repeat_after360_`t'm_ult = 1 if urate_below360_ult_date!=. & urate_date_!=. & (urate_date_ > (urate_below360_ult_date + 183)) & (urate_date_ <= (urate_below360_ult_date + 548))
+	***For those who attained serum urate target (at any point), was urate repeated after 12 months (between 6 and 12 months afterwards) - can then limit this to a timeframe after ULT initiation
+	gen repeat_after360_`t'm_ult = 1 if urate_below360_ult_date!=. & urate_date_!=. & (urate_date_ > (urate_below360_ult_date + 183)) & (urate_date_ <= (urate_below360_ult_date + 365))
 	gen repeat_below360_`t'm_ult = 1 if repeat_after360_`t'm_ult == 1 & urate_value_<360
 	sort patient_id repeat_after360_`t'm_ult
 	by patient_id: replace repeat_after360_`t'm_ult = repeat_after360_`t'm_ult[_n-1] if missing(repeat_after360_`t'm_ult)
@@ -1153,7 +1160,7 @@ foreach t in 6 12 {
 	sort patient_id repeat_below360_`t'm_ult
 	by patient_id: replace repeat_below360_`t'm_ult = repeat_below360_`t'm_ult[_n-1] if missing(repeat_below360_`t'm_ult)
 	lab var repeat_below360_`t'm_ult "Repeat serum urate level remains <360 micromol/L following ULT initiation" 
-	recode repeat_below360_`t'm_ult .=0 if repeat_after360_`t'm_ult!=.
+	recode repeat_below360_`t'm_ult .=0 if repeat_after360_`t'm_ult==1
 	lab def repeat_below360_`t'm_ult 0 "No" 1 "Yes"
 	lab val repeat_below360_`t'm_ult repeat_below360_`t'm_ult
 	tab repeat_below360_`t'm_ult, missing 
@@ -1397,7 +1404,7 @@ foreach t in 12 {
 	tab any_flares_`t'm
 }
 
-**Treatment of first flare after diagnosis (i.e. received colchicine vs. NSAIDs vs. steroids on same day)
+**Treatment of first flare after diagnosis (i.e. received colchicine vs. NSAIDs vs. steroids on same day) //could add combination
 gen first_flare_drug = 0 if first_flare_overall_date!=.
 
 forval i = 1/$max_prescription {
@@ -1473,7 +1480,7 @@ foreach t in 6 12 {
 
 **ULT risk factors at baseline
 gen ult_risk_bl = 1 if ult_risk_date<=${disease}_inc_date & ult_risk_date!=.
-recode ult_risk_bl 0=.
+recode ult_risk_bl .=0
 lab var ult_risk_bl "Presence of ULT risk factors at diagnosis"
 lab def ult_risk_bl 0 "No" 1 "Yes", modify
 lab val ult_risk_bl ult_risk_bl

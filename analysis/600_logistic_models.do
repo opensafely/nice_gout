@@ -48,7 +48,7 @@ if $running_locally ==1 {
 di "$disease"
 
 *Define age variable
-local age_var age_decile
+global age_var age_decile
 
 set type double
 
@@ -169,8 +169,13 @@ program define melogit_model, rclass
 
 		***Skip adjustment terms in age/sex-adjusted models unless they are the focal predictor
 		if "`model_label'" == "Age/sex-adjusted" {
-			if "`focal_predictor'" != "`age_var'" & "`term'" == "`age_var'" continue
+			if "`focal_predictor'" != "$age_var" & "`term'" == "$age_var" continue
 			if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
+		}
+		
+		***For calendar-time sensitivity models, output only focal predictor
+		if "`model_label'" == "Calendar-time adjusted" {
+			if "`varname'" != "`focalvar'" continue
 		}
 
 		***Store variable label
@@ -357,9 +362,14 @@ program define logistic_model
 
 			****Skip adjustment terms in age/sex-adjusted models unless they are the focal predictor
 			if "`model_label'" == "Age/sex-adjusted" {
-				if "`focal_predictor'" != "`age_var'" & "`term'" == "`age_var'" continue
+				if "`focal_predictor'" != "$age_var" & "`term'" == "$age_var" continue
 				if "`focal_predictor'" != "i.sex" & "`varname'" == "sex" continue
 			}
+		}
+		
+		***For calendar-time sensitivity models, output only focal predictor
+		if "`model_label'" == "Calendar-time adjusted" {
+			if "`varname'" != "`focalvar'" continue
 		}
 		
 		***Store variable label
@@ -421,7 +431,7 @@ local inclusions has_12m_fup has_12m_fup_ult
 
 **Core patient-level predictors
 local patient_predictors_base ///
-    `age_var' i.sex i.imd i.ethnicity i.bmicat i.smoke i.ckd_comb_bl i.chd_bl i.diabetes_bl i.heart_failure_bl i.cva_bl i.hypertension_bl i.alcohol_bl i.diuretic_bl i.sglt2_bl
+    $age_var i.sex i.imd i.ethnicity i.bmicat i.smoke i.ckd_comb_bl i.chd_bl i.diabetes_bl i.heart_failure_bl i.cva_bl i.hypertension_bl i.alcohol_bl i.diuretic_bl i.sglt2_bl
 	*i.ckd_comb_bl i.chd_bl //this is a test
 	*consider baseline_urate too
 		
@@ -449,12 +459,17 @@ foreach inclusion of local inclusions {
 	if "`inclusion'" == "has_12m_fup" {
 		local outcomes ult_12m
 		*local outcomes ckd_comb_bl //this is a test
-		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
+		local post_nice_var i.post_nice_diag
+		local patient_predictors_full `patient_predictors_base' `post_nice_var'
+		local time_adjust diagnosis_year
+
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
 		local outcomes urate_12m_ult
         *local outcomes chd_bl //this is a test
-		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
+		local post_nice_var i.post_nice_ult
+		local patient_predictors_full `patient_predictors_base' `post_nice_var'
+		local time_adjust ult_year
     }
     else {
         di as error "No outcomes defined for `inclusion'"
@@ -492,8 +507,8 @@ foreach inclusion of local inclusions {
 		foreach predictor of local predictors {
 			
 			local model_terms `predictor' age_decile i.sex
-			if "`predictor'" == "`age_var'" local model_terms `age_var' i.sex
-			if "`predictor'" == "i.sex" local model_terms i.sex `age_var'
+			if "`predictor'" == "$age_var" local model_terms $age_var i.sex
+			if "`predictor'" == "i.sex" local model_terms i.sex $age_var
 			
 			melogit_model `outcome' `"`model_terms'"' `"`predictor'"' `"Age/sex-adjusted"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 0
 		}
@@ -510,6 +525,12 @@ foreach inclusion of local inclusions {
 		
 		melogit_model `outcome' `"`predictors'"' `""' `"Multivariable pt/practice"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 1
 		 
+		****Sensitivity multivariable model with patient-level predictors and practice-level predictors, as well as adjusting for calendar year ============
+		
+		*****Store predictors
+		local predictors `patient_predictors_full' `practice_predictors' i.`time_adjust'
+		
+		melogit_model `outcome' `"`predictors'"' `"`post_nice_var'"' `"Calendar-time adjusted"' `"`outlabel'"' `"`inclusion'"' `melogit_measures' 0
 	}
 }
 
@@ -543,12 +564,17 @@ foreach inclusion of local inclusions {
 	if "`inclusion'" == "has_12m_fup" {
 		local outcomes ult_12m
 		*local outcomes ckd_comb_bl //this is a test
-		local patient_predictors_full `patient_predictors_base' i.post_nice_diag
+		local post_nice_var i.post_nice_diag
+		local patient_predictors_full `patient_predictors_base' `post_nice_var'
+		local time_adjust diagnosis_year
+
     }
     else if "`inclusion'" == "has_12m_fup_ult" {
 		local outcomes urate_12m_ult
         *local outcomes chd_bl //this is a test
-		local patient_predictors_full `patient_predictors_base' i.post_nice_ult
+		local post_nice_var i.post_nice_ult
+		local patient_predictors_full `patient_predictors_base' `post_nice_var'
+		local time_adjust ult_year
     }
     else {
         di as error "No outcomes defined for `inclusion'"
@@ -578,8 +604,8 @@ foreach inclusion of local inclusions {
 		foreach predictor of local predictors {
 			
 			local model_terms `predictor' age_decile i.sex
-			if "`predictor'" == "`age_var'" local model_terms `age_var' i.sex
-			if "`predictor'" == "i.sex" local model_terms i.sex `age_var'
+			if "`predictor'" == "$age_var" local model_terms $age_var i.sex
+			if "`predictor'" == "i.sex" local model_terms i.sex $age_var
 			
 			logistic_model `outcome' `"`model_terms'"' `"`predictor'"' `"Age/sex-adjusted"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'
 		}
@@ -588,6 +614,11 @@ foreach inclusion of local inclusions {
 		
 		logistic_model `outcome' `"`predictors'"' `""' `"Multivariable"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'
 		
+		****Sensitivity multivariable model with patient-level predictors and practice-level predictors, as well as adjusting for calendar year ============
+		
+		local predictors `patient_predictors_full' i.`time_adjust'
+		
+		logistic_model `outcome' `"`predictors'"' `"`post_nice_var'"' `"Calendar-time adjusted"' `"`outlabel'"' `"`inclusion'"' `logistic_measures'	
 	}
 }
 
