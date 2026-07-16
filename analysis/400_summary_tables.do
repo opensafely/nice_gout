@@ -164,9 +164,13 @@ di "`outpatients_ref_before'"
 local outpatients_opa_before ${outpatients}_opa_before
 di "`outpatients_opa_before'"
 
-**Process catergorical outcomes of interest (other than outpatient-based variables)
-foreach outcome of varlist has_12m_fup has_6m_fup ult_risk_bl sglt2_bl ace_arb_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
-    rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
+**Loop through time periods of interest
+foreach t in 12 {
+
+	**Process catergorical outcomes of interest (other than outpatient-based variables)
+	foreach outcome of varlist has_`t'm_fup ult_risk_bl sglt2_bl ace_arb_bl diuretic_bl `disease_feature_vars_bl' urate_bl_360_repeat urate_bl_cat diab_bl_cat hba1c_bl_cat ckd_transplant_bl ckd_comb_bl egfr_bl_cat `blood_vars_test_bl' `comorbidity_vars_bl' bmicat smoke region imd ethnicity sex agegroup {
+		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
+	}
 }
 
 **Process OPA outcomes only from July 2019 onwards
