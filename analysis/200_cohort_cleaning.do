@@ -31,6 +31,9 @@ log off
 *Set Ado file path
 adopath + "$projectdir/analysis/extra_ados"
 
+*Run checks
+local checks 0
+
 *Set disease list, characteristics of interest, and study dates (passed from yaml)
 global arglist disease studystart_date studyend_date studyfup_date nice_date demographic comorbidities disease_features events admissions bloods medications outpatients
 args $arglist
@@ -97,8 +100,6 @@ if !_rc & "`r(varlist)'" != "" {
 global max_prescription = `max_prescription'
 di "$max_prescription"
 
-set type double
-
 set scheme plotplainblind
 
 *Import primary dataset
@@ -136,24 +137,20 @@ if !_rc & "`r(varlist)'" != "" {
 *Inclusion criteria (amend as necessary) ===============================================*/
 
 di "${disease}_inc_case"
-codebook ${disease}_inc_case
 
 **Check criteria applied in dataset definition
 gen ${disease} = 1 if ${disease}_inc_case=="T" & ((${disease}_inc_date >= date("$studystart_date", "YMD")) & (${disease}_inc_date <= date("$studyend_date", "YMD"))) & (${disease}_age >=18 & ${disease}_age <= 110) & (sex!="") & ${disease}_pre_reg=="T" & ${disease}_alive_inc=="T"
 recode ${disease} .=0
 tab ${disease}, missing //should all be 1
-codebook ${disease}_inc_date //check
 
 **Apply additional disease-specific inclusion criteria (amend as necessary)
 
 **Drop cases where first ULT prescription was >30 days before first recorded diagnosis code (could also apply in dataset definition, but retained here to assess how many are dropped)
-codebook ult_first_date //check
 gen ult_first = 1 if ult_first_date!=.
 tab ult_first if ult_first_date!=. & ult_first_date<${disease}_inc_date
 tab ult_first if ult_first_date!=. & (ult_first_date+30)<${disease}_inc_date //>30 days before first recorded diagnosis code
 tab ult_first if ult_first_date!=. & (ult_first_date+60)<${disease}_inc_date //>60 days before first recorded diagnosis code
 drop if ${disease}_inc_date!=. & ult_first_date!=. & (ult_first_date+30)<${disease}_inc_date //drop if first ULT script more than 30 days before first recorded diagnosis code 
-codebook ${disease}_inc_date //check
 
 *Generate month and year of diagnosis, and define duration of follow-up post-diagnosis ===========================================================*/
 
@@ -176,7 +173,7 @@ lab val diagnosis_year diagnosis_year_lbl
 tab diagnosis_year, missing
 
 **Proportion of patients with at least 6 or 12 months of GP registration after diagnosis
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -445,7 +442,6 @@ foreach drug in diuretic sglt2 ace_arb {
 	di "`drug'"
 
 	***Drug use at baseline (prescribed within 6 months prior to index diagnosis)
-	codebook `drug'_bl_date //check then remove
 	
 	gen `drug'_bl = 1 if (${disease}_inc_date - `drug'_bl_date) <= 183 & `drug'_bl_date != . //not necessary
 	recode `drug'_bl .=0
@@ -483,7 +479,7 @@ tab `drug'_first_drug, missing
 drop `drug'_first_d
 
 ***Prescriptions of drug class within a timeframe after diagnosis
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -522,9 +518,28 @@ foreach var of varlist allopurinol_high_first_date febuxostat_high_first_date {
 	lab val `drug'_high `drug'_high 
 	tab `drug'_high, missing
 
-***Prescriptions for individual drugs within class within a timeframe after diagnosis (amend list as necessary)
+***Prescriptions for individual drugs within class within a timeframe after diagnosis (amend list as necessary) and prophylaxis use
 
+***Store max number of prescriptions for prophylaxis drugs
+foreach tx in colchicine nsaid steroid {
+
+	local max_`tx' = 0
+
+	capture quietly ds `tx'_date_*
+
+	if !_rc & "`r(varlist)'" != "" {
+		foreach v of varlist `r(varlist)' {
+			if regexm("`v'", "^`tx'_date_([0-9]+)$") {
+				local idx = real(regexs(1))
+				local max_`tx' = max(`max_`tx'', `idx')
+			}
+		}
+	}
+}
+
+***Loop through drugs of interest
 foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
+	
 	if "`med'" == "`drug'" {
 		local druglabel = "`Drug'" 
 	}
@@ -540,30 +555,25 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 	lab val `med'_ever `med'_ever
 		
 	***Was prophylaxis prescribed on same day at first ULT drug - Nb. restricted to first initiation of each ULT drug
-	gen `med'_prophylaxis = .
-	gen `med'_prophylaxis_2 = .
+	gen `med'_prophylaxis = 0 if `med'_first_date !=.
+	gen `med'_prophylaxis_2 = 0 if `med'_first_date !=.
 	
-	forval i = 1/$max_prescription {
-		display $max_prescription
-		display `i'
-		
-	    ****Same day prophylaxis
-		replace `med'_prophylaxis = 1 if (`med'_first_date == colchicine_date_`i') & colchicine_date_`i'!=. & `med'_first_date!=.
-		replace `med'_prophylaxis = 1 if (`med'_first_date == nsaid_date_`i') & nsaid_date_`i'!=. & `med'_first_date!=.
-		replace `med'_prophylaxis = 1 if (`med'_first_date == steroid_date_`i') & steroid_date_`i'!=. & `med'_first_date!=.
-		
-		****+/- 3 days day prophylaxis
-		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - colchicine_date_`i') <= 3) & colchicine_date_`i'!=. & `med'_first_date!=.
-		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - nsaid_date_`i') <= 3) & nsaid_date_`i'!=. & `med'_first_date!=.
-		replace `med'_prophylaxis_2 = 1 if (abs(`med'_first_date - steroid_date_`i') <= 3) & steroid_date_`i'!=. & `med'_first_date!=.
+	foreach tx in colchicine nsaid steroid {
+
+		forvalues i = 1/`max_`tx'' {
+
+		****Same-day prophylaxis
+        replace `med'_prophylaxis = 1 if `med'_prophylaxis == 0 & !missing(`med'_first_date, `tx'_date_`i') & `med'_first_date == `tx'_date_`i'
+			
+		****Prophylaxis within +/- 3 days
+        replace `med'_prophylaxis_2 = 1 if `med'_prophylaxis_2 == 0 & !missing(`med'_first_date, `tx'_date_`i') & abs(`med'_first_date - `tx'_date_`i') <= 3
+		}
 	}
 	
-	recode `med'_prophylaxis .=0 if `med'_first_date !=.
 	lab var `med'_prophylaxis "Prophylaxis prescribed at same time as ULT initiation"
 	lab define `med'_prophylaxis 0 "No" 1 "Yes", replace
 	lab val `med'_prophylaxis `med'_prophylaxis
 	
-	recode `med'_prophylaxis_2 .=0 if `med'_first_date !=.
 	lab var `med'_prophylaxis_2 "Prophylaxis prescribed within 3 days of ULT initiation"
 	lab define `med'_prophylaxis_2 0 "No" 1 "Yes", replace
 	lab val `med'_prophylaxis_2 `med'_prophylaxis_2
@@ -578,7 +588,7 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 	gen time_to_`med' = (`med'_first_date - ${disease}_inc_date) if `med'_first_date!=.
 	
 	****Generate variable for those who had prescription within 6/12m of diagnosis
-	foreach t in 6 12 {
+	foreach t in 12 {
 		local days = int((`t'/12)*365.25)
 		di `days'
 	 
@@ -599,9 +609,17 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 		****Number of prescriptions issued in 6/12m after first script (Nb. doses will be double counted if different strengths issued)
 		lab var `med'_count_`t'm "Number of prescriptions for `druglabel' within `t' months of diagnosis"
 		tabstat `med'_count_`t'm, stats (n mean sd p50 p25 p75)
+	}
+	
+	***Reshape once then do further processing
+	reshape long `med'_date_, i(patient_id) j(`med'_order)
+
+	foreach t in 12 {
+		
+		local days = int((`t'/12)*365.25)
+		di `days'
 		
 		****Number of prescriptions issued in 6/12m of first prescription (to assess continued prescribing) - Nb. only looks at prescriptions occurring after diagnosis
-		reshape long `med'_date_, i(patient_id) j(`med'_order)
 		gen `med'_within_`t'm = 1 if ((`med'_date_>=`med'_first_date) & (`med'_date_<=(`med'_first_date + `days'))) & `med'_date_!=.
 		bys patient_id (`med'_within_`t'm): gen n=_n if `med'_within_`t'm!=.
 		by patient_id: egen `med'_scripts_`t'm = max(n)
@@ -611,8 +629,13 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 		gen `med'_ongoing_`t'm = 1 if ((`med'_date_>=(`med'_first_date + (`days' - 60))) & (`med'_date_<=(`med'_first_date + (`days' + 60)))) & `med'_date_!=.	
 		sort patient_id `med'_ongoing_`t'm
 		by patient_id: replace `med'_ongoing_`t'm = `med'_ongoing_`t'm[_n-1] if missing(`med'_ongoing_`t'm)
+	}
+	
+	***Reshape wide then finalise processing
+	reshape wide `med'_date_, i(patient_id) j(`med'_order)
+	
+	foreach t in 12 {
 		
-		reshape wide `med'_date_, i(patient_id) j(`med'_order)
 		lab var `med'_scripts_`t'm "Number of prescriptions for `druglabel' within `t' months of first prescription"
 		tabstat `med'_scripts_`t'm, stats (n mean sd p50 p25 p75)
 		recode `med'_ongoing_`t'm .=0 if `med'_first_date!=.
@@ -633,7 +656,7 @@ foreach med in `drug' {
 		local druglabel = strproper("`med'")
 	}
 	
-	foreach t in 6 12 {
+	foreach t in 12 {
 		local days = int((`t'/12)*365.25)
 		di `days'
 		local half_days = `days'/2
@@ -678,7 +701,6 @@ use "$projectdir/output/data/cohort_meds.dta", clear
 
 *local blood "urate"
 foreach blood in $bloods {
-	di "`blood'"
 	
 	**Set thresholds for plausible low and high values (amend as necessary)
 	if "`blood'" == "creatinine" {
@@ -701,8 +723,6 @@ foreach blood in $bloods {
 		local low 0
 		local high 100000
 	}
-	di "`low'"
-	di "`high'"
 
 	***Find number of tests
 	local max = 0
@@ -720,13 +740,11 @@ foreach blood in $bloods {
 	***Set implausible values to missing (as defined above)
 	if `max'!=0 {
 		forval i = 1/`max' 	{
-			codebook `blood'_value_`i' //check
 			tabstat `blood'_value_`i', stats(n mean sd p50 p25 p75)
 			summ `blood'_value_`i' if inrange(`blood'_value_`i', `low', `high')
 			replace `blood'_value_`i' = . if !inrange(`blood'_value_`i', `low', `high')
 			replace `blood'_value_`i' = . if `blood'_date_`i' == . 
 			replace `blood'_date_`i' = . if `blood'_value_`i' == . 
-			codebook `blood'_value_`i' //check
 			tabstat `blood'_value_`i', stats(n mean sd p50 p25 p75)
 		}
 	}
@@ -737,11 +755,13 @@ foreach blood in $bloods {
 		forval i = 1/`max' {
 
 			****Review values according to likely units
+			if `checks' {
 			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
 			summ urate_value_`i' if inrange(urate_value_`i', 0.05, 2)
 			summ urate_value_`i' if inrange(urate_value_`i', 2, 50)
 			summ urate_value_`i' if inrange(urate_value_`i', 50, 3000)
-
+			}
+			
 			****Remove values consistent with neither mmol/L nor micromol/L
 			replace urate_value_`i' = . if !inrange(urate_value_`i', 0.05, 2) & !inrange(urate_value_`i', 50, 3000)
 			replace urate_date_`i' = . if missing(urate_value_`i')
@@ -750,8 +770,9 @@ foreach blood in $bloods {
 			replace urate_value_`i' = (urate_value_`i' * 1000) if inrange(urate_value_`i', 0.05, 2)
 
 			****Review values
-			codebook urate_value_`i'
+			if `checks' {
 			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
+			}
 		}
 	}
 	log off
@@ -794,7 +815,7 @@ foreach blood in $bloods {
 	recode had_`blood'_bl .=0
 
 	***Code blood tests within 6/12 months after diagnosis
-	foreach t in 6 12 {
+	foreach t in 12 {
 		local days = int((`t'/12)*365.25)
 		di `days'
 		gen `blood'_within_`t'm = 1 if time_to_`blood' >=0 & time_to_`blood' <=`days'
@@ -815,8 +836,6 @@ foreach blood in $bloods {
 
 **Generate eGFR from serum creatinine (using CKD-EPI formula with no ethnicity) ============================*/ 
 reshape long creatinine_value_ creatinine_date_, i(patient_id) j(creatinine_order)
-codebook creatinine_value if creatinine_order==1 //check
-codebook creatinine_date if creatinine_order==1 //check
  
 gen SCr_adj = creatinine_value/88.4
 
@@ -841,7 +860,6 @@ drop min max SCr_adj
 
 gen egfr_date_ = creatinine_date_
 format egfr_date_ %td
-codebook egfr_value_ if creatinine_order==1 //check
 
 ***Date of first eGFR <60 (from 24 months before diagnosis to end of study follow-up) - consider amending 24-month limit for survival analyses
 gen egfr_ckd = 1 if egfr_value_< 60 & !missing(egfr_value_)
@@ -968,9 +986,6 @@ label var ckd_comb_12m "CKD"
 tab ckd_comb_12m, missing
 
 **Categorise HbA1c at baseline ============================*/
-codebook hba1c_bl_value //check reasonable (i.e. mmol, not %) - would be screened out by the above
-codebook hba1c_bl_date //check
-
 gen hba1c_bl_cat = 0 if hba1c_bl_value < 58
 replace hba1c_bl_cat = 1 if hba1c_bl_value >= 58 & hba1c_bl_val !=.
 replace hba1c_bl_cat = 9 if hba1c_bl_cat ==. 
@@ -1060,7 +1075,7 @@ lab val urate_after_diag urate_after_diag
 tab urate_after_diag, missing
 
 ***Define proportion of patients who attained serum urate <360/300 micromol/L within 6/12 months of diagnosis, irrespective of ULT use - can subsequently limit this to those who had 6m/12m of follow-up post-diagnosis
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 
@@ -1143,7 +1158,7 @@ lab def urate_after_ult 0 "No" 1 "Yes"
 lab val urate_after_ult urate_after_ult
 tab urate_after_ult, missing
 
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -1370,7 +1385,7 @@ restore
 reshape wide flare_overall_date_ flare_drug_, i(patient_id) j(flare_overall_order)
 
 **Check whether at least 12 months of follow-up after first flare
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -1466,7 +1481,7 @@ format %td ult_risk_date_dx
 lab var ult_risk_date_dx "Onset of ULT risk factors"
 
 **Check whether at least 12 months of follow-up after at risk date
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -1486,15 +1501,24 @@ lab def ult_risk_bl 0 "No" 1 "Yes", modify
 lab val ult_risk_bl ult_risk_bl
 
 **Check whether ULT prescribed when became high risk (or at diagnosis if before gout diagnosis) - a prescription 6m before or up to 6/12m afterwards
-foreach t in 6 12 {
+
+reshape long ult_date_, i(patient_id) j(ult_order)
+
+foreach t in 12 {
+	
 	local days = int((`t'/12)*365.25)
 	di `days' 
-	reshape long ult_date_, i(patient_id) j(ult_order)
+	
 	gen ult_risk_p_`t'm = 1 if ult_risk_date_dx!=. & ult_date_!=. & (ult_date_ >= (ult_risk_date_dx - 183)) & (ult_date_ <= (ult_risk_date_dx + `days')) 
 	sort patient_id ult_risk_p_`t'm
 	by patient_id: replace ult_risk_p_`t'm= ult_risk_p_`t'm[_n-1] if missing(ult_risk_p_`t'm)
-	reshape wide ult_date_, i(patient_id) j(ult_order)
 	recode ult_risk_p_`t'm .=0 if ult_risk_date_dx!=. 
+}
+
+reshape wide ult_date_, i(patient_id) j(ult_order)
+
+foreach t in 12 {
+	
 	lab var ult_risk_p_`t'm "Prescribed ULT within `t' months of onset of ULT risk factors"
 	lab def ult_risk_p_`t'm 0 "No" 1 "Yes"
 	lab val ult_risk_p_`t'm ult_risk_p_`t'm
@@ -1508,7 +1532,6 @@ save "$projectdir/output/data/cohort_events.dta", replace
 use "$projectdir/output/data/cohort_events.dta", clear
 
 **Any recorded appointment with specialty (passed from YAML; can loop if necessary) in the 12 months before diagnosis (restricted by dataset definition)
-codebook ${outpatients}_opa_date //check
 gen ${outpatients}_opa_before = 1 if (${outpatients}_opa_date < ${disease}_inc_date) & ${outpatients}_opa_date!=.
 lab var ${outpatients}_opa_before "Outpatient appointment in ${outpatients} within 12 months before diagnosis date"
 lab define ${outpatients}_opa_before 0 "No" 1 "Yes"
@@ -1528,7 +1551,6 @@ lab var ${outpatients}_opa_after_date "Date of first outpatient appointment in $
 format ${outpatients}_opa_after_date %td
 
 **Any recorded referral to specialty (passed from YAML; can loop if necessary) in the 12 months before diagnosis
-codebook ${outpatients}_ref_date //check
 gen ${outpatients}_ref_before = 1 if (${outpatients}_ref_date < ${disease}_inc_date) & ${outpatients}_ref_date!=.
 lab var ${outpatients}_ref_before "Referral to ${outpatients} within 12 months before diagnosis date"
 lab define ${outpatients}_ref_before 0 "No" 1 "Yes"
@@ -1548,7 +1570,7 @@ lab var ${outpatients}_ref_after_date "Date of first referral to ${outpatients} 
 format ${outpatients}_ref_after_date %td
 
 **Any recorded referral to specialty, appointment in specialty, or either/or, within 12 months before or after diagnosis
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
@@ -1589,7 +1611,7 @@ lab val ckd_transplant_bl ckd_transplant_bl
 tab ckd_transplant_bl, missing
 
 **Any recorded referral to specialty, appointment in specialty, or either/or, within 12 months before or after diagnosis if the patient had CKD stages 3b to 5 or they have had an organ transplant at diagnosis
-foreach t in 6 12 {
+foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
