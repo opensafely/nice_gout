@@ -634,8 +634,34 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 		local summaryvars `summaryvars' `med'_scripts_`t'm `med'_ongoing_`t'm
 	}
 	
-	****Keep relevant variables and one row per patient
-	collapse (max) `summaryvars', by(patient_id)
+	**Store variable labels and value-label names before collapse
+	local i = 0
+
+	foreach v of local summaryvars {
+		local ++i
+		local var`i' "`v'"
+		local varlab`i' : variable label `v'
+		local vallab`i' : value label `v'
+	}
+
+	local nvars = `i'
+
+	**Collapse to one observation per patient
+	collapse (max) `summaryvars', by(patient_id) 
+
+	**Restore variable labels and value-label assignments
+	forvalues i = 1/`nvars' {
+		local v "`var`i''"
+
+		if `"`varlab`i''"' != "" {
+			label variable `v' `"`varlab`i''"'
+		}
+
+		if "`vallab`i''" != "" {
+			label values `v' `vallab`i''
+		}
+	}
+
 	save "$projectdir/output/data/med_summary.dta", replace
 	
 	restore
@@ -843,8 +869,33 @@ foreach blood in $bloods {
 		local summaryvars `summaryvars' `blood'_within_`t'm
 	}
 	
-	***Create one row per patient
-	collapse (max) `summaryvars', by(patient_id)
+	**Store variable labels and value-label names before collapse
+	local i = 0
+
+	foreach v of local summaryvars {
+		local ++i
+		local var`i' "`v'"
+		local varlab`i' : variable label `v'
+		local vallab`i' : value label `v'
+	}
+
+	local nvars = `i'
+
+	**Collapse to one observation per patient
+	collapse (max) `summaryvars', by(patient_id) 
+
+	**Restore variable labels and value-label assignments
+	forvalues i = 1/`nvars' {
+		local v "`var`i''"
+
+		if `"`varlab`i''"' != "" {
+			label variable `v' `"`varlab`i''"'
+		}
+
+		if "`vallab`i''" != "" {
+			label values `v' `vallab`i''
+		}
+	}
 
 	save "$projectdir/output/data/blood_summary.dta", replace
 
@@ -918,9 +969,35 @@ drop n egfr_before_ult time_egfr_before_ult
 
 drop egfr_ckd subsequent_egfr_ckd
 
-local egfr_summary first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date egfr_bl_value egfr_before_ult_value
+local summaryvars first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date egfr_bl_value egfr_before_ult_value
 
-collapse (max) `egfr_summary', by(patient_id)
+**Store variable labels and value-label names before collapse
+local i = 0
+
+foreach v of local summaryvars {
+    local ++i
+    local var`i' "`v'"
+    local varlab`i' : variable label `v'
+    local vallab`i' : value label `v'
+}
+
+local nvars = `i'
+
+**Collapse to one observation per patient
+collapse (max) `summaryvars', by(patient_id) 
+
+**Restore variable labels and value-label assignments
+forvalues i = 1/`nvars' {
+    local v "`var`i''"
+
+    if `"`varlab`i''"' != "" {
+        label variable `v' `"`varlab`i''"'
+    }
+
+    if "`vallab`i''" != "" {
+        label values `v' `vallab`i''
+    }
+}
 
 format first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date %td
 
@@ -1294,7 +1371,33 @@ foreach t in 12 {
     }
 }
 
+**Store variable labels and value-label names before collapse
+local i = 0
+
+foreach v of local summaryvars {
+    local ++i
+    local var`i' "`v'"
+    local varlab`i' : variable label `v'
+    local vallab`i' : value label `v'
+}
+
+local nvars = `i'
+
+**Collapse to one observation per patient
 collapse (max) `summaryvars', by(patient_id) 
+
+**Restore variable labels and value-label assignments
+forvalues i = 1/`nvars' {
+    local v "`var`i''"
+
+    if `"`varlab`i''"' != "" {
+        label variable `v' `"`varlab`i''"'
+    }
+
+    if "`vallab`i''" != "" {
+        label values `v' `vallab`i''
+    }
+}
 
 save "$projectdir/output/data/urate_summary.dta", replace
 
