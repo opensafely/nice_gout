@@ -211,16 +211,6 @@ yaml_footer = f"""
         data1: output/data/cohort_processed.dta
         data2: output/data/flares_long.dta
 
-  cohort_cleaning_new:
-    run: stata-mp:latest analysis/200_cohort_cleaning_new.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}" "{demographic_list_stata}" "{comorbidities_list_stata}" "{disease_features_list_stata}" "{events_list_stata}" "{admissions_list_stata}" "{bloods_list_stata}" "{medications_list_stata}" "{outpatients_list_stata}"
-    needs: [generate_dataset_primary, measures_practice_{primary_disease}]
-    outputs:
-      highly_sensitive:
-        log1: logs/cohort_cleaning_new.log   
-        data1: output/data/cohort_processed2.dta
-        data2: output/data/flares_long2.dta
-
-
   data_tables:
     run: stata-mp:latest analysis/300_data_tables.do "{primary_disease}" "{demographic_list_stata}" "{outpatients_list_stata}"
     needs: [cohort_cleaning]

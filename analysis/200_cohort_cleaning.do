@@ -32,7 +32,7 @@ log off
 adopath + "$projectdir/analysis/extra_ados"
 
 *Run checks
-local checks 0
+global checks 0
 
 *Set disease list, characteristics of interest, and study dates (passed from yaml)
 global arglist disease studystart_date studyend_date studyfup_date nice_date demographic comorbidities disease_features events admissions bloods medications outpatients
@@ -610,32 +610,68 @@ foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
 		lab var `med'_count_`t'm "Number of prescriptions for `druglabel' within `t' months of diagnosis"
 		tabstat `med'_count_`t'm, stats (n mean sd p50 p25 p75)
 	}
+
+	***Keep relevant variables, then reshape once then do further processing
+	preserve 
 	
-	***Reshape once then do further processing
+	keep patient_id `med'_first_date `med'_date_*
 	reshape long `med'_date_, i(patient_id) j(`med'_order)
+	local summaryvars
 
 	foreach t in 12 {
 		
 		local days = int((`t'/12)*365.25)
-		di `days'
 		
 		****Number of prescriptions issued in 6/12m of first prescription (to assess continued prescribing) - Nb. only looks at prescriptions occurring after diagnosis
-		gen `med'_within_`t'm = 1 if ((`med'_date_>=`med'_first_date) & (`med'_date_<=(`med'_first_date + `days'))) & `med'_date_!=.
+		gen `med'_within_`t'm = 1 if ((`med'_date_>=`med'_first_date) & (`med'_date_<=(`med'_first_date + `days'))) & !missing(`med'_date_, `med'_first_date)
 		bys patient_id (`med'_within_`t'm): gen n=_n if `med'_within_`t'm!=.
 		by patient_id: egen `med'_scripts_`t'm = max(n)
 		drop n `med'_within_`t'm
 		
 		****Was the patient still prescribed drug at 6/12 months (+/- 2 month window) after start date
 		gen `med'_ongoing_`t'm = 1 if ((`med'_date_>=(`med'_first_date + (`days' - 60))) & (`med'_date_<=(`med'_first_date + (`days' + 60)))) & `med'_date_!=.	
-		sort patient_id `med'_ongoing_`t'm
-		by patient_id: replace `med'_ongoing_`t'm = `med'_ongoing_`t'm[_n-1] if missing(`med'_ongoing_`t'm)
+		
+		local summaryvars `summaryvars' `med'_scripts_`t'm `med'_ongoing_`t'm
 	}
 	
-	***Reshape wide then finalise processing
-	reshape wide `med'_date_, i(patient_id) j(`med'_order)
+	**Store variable labels and value-label names before collapse
+	local i = 0
+
+	foreach v of local summaryvars {
+		local ++i
+		local var`i' "`v'"
+		local varlab`i' : variable label `v'
+		local vallab`i' : value label `v'
+	}
+
+	local nvars = `i'
+
+	**Collapse to one observation per patient
+	collapse (max) `summaryvars', by(patient_id) 
+
+	**Restore variable labels and value-label assignments
+	forvalues i = 1/`nvars' {
+		local v "`var`i''"
+
+		if `"`varlab`i''"' != "" {
+			label variable `v' `"`varlab`i''"'
+		}
+
+		if "`vallab`i''" != "" {
+			label values `v' `vallab`i''
+		}
+	}
+
+	save "$projectdir/output/data/med_summary.dta", replace
 	
+	restore
+
+	***Merge back with main dataset
+	merge 1:1 patient_id using "$projectdir/output/data/med_summary.dta", nogen
+
 	foreach t in 12 {
 		
+		recode `med'_scripts_`t'm .=0 if `med'_first_date != .
 		lab var `med'_scripts_`t'm "Number of prescriptions for `druglabel' within `t' months of first prescription"
 		tabstat `med'_scripts_`t'm, stats (n mean sd p50 p25 p75)
 		recode `med'_ongoing_`t'm .=0 if `med'_first_date!=.
@@ -755,7 +791,7 @@ foreach blood in $bloods {
 		forval i = 1/`max' {
 
 			****Review values according to likely units
-			if `checks' {
+			if $checks {
 			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
 			summ urate_value_`i' if inrange(urate_value_`i', 0.05, 2)
 			summ urate_value_`i' if inrange(urate_value_`i', 2, 50)
@@ -770,12 +806,17 @@ foreach blood in $bloods {
 			replace urate_value_`i' = (urate_value_`i' * 1000) if inrange(urate_value_`i', 0.05, 2)
 
 			****Review values
-			if `checks' {
+			if $checks {
 			tabstat urate_value_`i', stats(n mean sd p50 p25 p75)
 			}
 		}
 	}
 	log off
+	
+	***Temporarily retain only variables required for this blood test
+	preserve
+
+	keep patient_id ${disease}_inc_date ult_first_date `blood'_value_* `blood'_date_*
 
 	***Reshape to long format
 	reshape long `blood'_value_ `blood'_date_, i(patient_id) j(`blood'_order)
@@ -803,41 +844,75 @@ foreach blood in $bloods {
 	gen `blood'_bl_value=`blood'_value_ if n==1 & abs_time_to_`blood'!=. 
 	lab var `blood'_bl_value "Serum `blood' at baseline"
 	gen had_`blood'_bl = 1 if `blood'_bl_value!=.
+	recode had_`blood'_bl .=0
 	lab var had_`blood'_bl "Serum `blood' performed at baseline"
 	lab define had_`blood'_bl 0 "No" 1 "Yes", modify
 	lab val had_`blood'_bl had_`blood'_bl
 	gen `blood'_bl_date=`blood'_date_ if n==1 & abs_time_to_`blood'!=.
 	format `blood'_bl_date %td 
+	lab var `blood'_bl_date "Date of baseline serum `blood'"
 	drop n
-	by patient_id: replace `blood'_bl_value = `blood'_bl_value[_n-1] if missing(`blood'_bl_value)
-	by patient_id: replace `blood'_bl_date = `blood'_bl_date[_n-1] if missing(`blood'_bl_date)
-	by patient_id: replace had_`blood'_bl = had_`blood'_bl[_n-1] if missing(had_`blood'_bl)
-	recode had_`blood'_bl .=0
+	
+	***Blood tests within specified periods after diagnosis
+	local summaryvars `blood'_bl_value `blood'_bl_date had_`blood'_bl
 
 	***Code blood tests within 6/12 months after diagnosis
 	foreach t in 12 {
 		local days = int((`t'/12)*365.25)
-		di `days'
-		gen `blood'_within_`t'm = 1 if time_to_`blood' >=0 & time_to_`blood' <=`days'
+
+		gen `blood'_within_`t'm = inrange(time_to_`blood', 0, `days') & !missing(`blood'_value_)		
 		local Blood = upper(substr("`blood'",1,1)) + substr("`blood'",2,.)
 		lab var `blood'_within_`t'm "`Blood'"
 		lab define `blood'_within_`t'm 0 "No" 1 "Yes"
 		lab val `blood'_within_`t'm `blood'_within_`t'm
-		sort patient_id `blood'_within_`t'm
-		by patient_id: replace `blood'_within_`t'm = `blood'_within_`t'm[_n-1] if missing(`blood'_within_`t'm)
-		recode `blood'_within_`t'm .=0
+		
+		local summaryvars `summaryvars' `blood'_within_`t'm
 	}
 	
-	***Reshape to wide format
-	drop `blood'_after_ult time_to_`blood' abs_time_to_`blood'
-	reshape wide `blood'_value_ `blood'_date_, i(patient_id) j(`blood'_order)
-	order `blood'_bl_value, after(`blood'_bl_date) 
+	**Store variable labels and value-label names before collapse
+	local i = 0
+
+	foreach v of local summaryvars {
+		local ++i
+		local var`i' "`v'"
+		local varlab`i' : variable label `v'
+		local vallab`i' : value label `v'
+	}
+
+	local nvars = `i'
+
+	**Collapse to one observation per patient
+	collapse (max) `summaryvars', by(patient_id) 
+
+	**Restore variable labels and value-label assignments
+	forvalues i = 1/`nvars' {
+		local v "`var`i''"
+
+		if `"`varlab`i''"' != "" {
+			label variable `v' `"`varlab`i''"'
+		}
+
+		if "`vallab`i''" != "" {
+			label values `v' `vallab`i''
+		}
+	}
+
+	save "$projectdir/output/data/blood_summary.dta", replace
+
+	restore
+
+	***Merge summaries back into main wide dataset
+	merge 1:1 patient_id using "$projectdir/output/data/blood_summary.dta", nogen
 }
 
 **Generate eGFR from serum creatinine (using CKD-EPI formula with no ethnicity) ============================*/ 
+preserve
+
+keep patient_id age sex ult_first_date creatinine_bl_date creatinine_value_* creatinine_date_*
+
 reshape long creatinine_value_ creatinine_date_, i(patient_id) j(creatinine_order)
  
-gen SCr_adj = creatinine_value/88.4
+gen SCr_adj = creatinine_value_/88.4
 
 gen min = .
 replace min = SCr_adj/0.7 if sex==1
@@ -865,7 +940,6 @@ format egfr_date_ %td
 gen egfr_ckd = 1 if egfr_value_< 60 & !missing(egfr_value_)
 bys patient_id egfr_ckd (egfr_date_): gen n=_n if egfr_ckd!=.
 gen first_egfr_ckd_date = egfr_date_ if n==1
-format first_egfr_ckd_date %td
 drop n
 sort patient_id first_egfr_ckd_date
 by patient_id: replace first_egfr_ckd_date = first_egfr_ckd_date[_n-1] if missing(first_egfr_ckd_date)
@@ -875,20 +949,12 @@ lab var first_egfr_ckd_date "Date of first eGFR <60"
 gen subsequent_egfr_ckd = 1 if egfr_ckd == 1 & !missing(first_egfr_ckd_date) & (egfr_date_ >= (first_egfr_ckd_date + 90))
 bys patient_id subsequent_egfr_ckd (egfr_date_): gen n=_n if subsequent_egfr_ckd==1
 gen second_egfr_ckd_date = egfr_date_ if n==1
-format second_egfr_ckd_date %td
 drop n
-sort patient_id second_egfr_ckd_date
-by patient_id: replace second_egfr_ckd_date = second_egfr_ckd_date[_n-1] if missing(second_egfr_ckd_date)
 lab var second_egfr_ckd_date "Date of second eGFR <60, at least 90 days after first"
 
 ***Baseline eGFR value with respect to diagnosis date
 gen egfr_bl_date = egfr_date_ if creatinine_bl_date == egfr_date_ & creatinine_bl_date!=. & egfr_value_!=. & egfr_date_!=.
-format egfr_bl_date %td
 gen egfr_bl_value = egfr_value_ if creatinine_bl_date == egfr_date_ & creatinine_bl_date!=. & egfr_value_!=. & egfr_date_!=.
-sort patient_id egfr_bl_date
-by patient_id: replace egfr_bl_date = egfr_bl_date[_n-1] if missing(egfr_bl_date)
-sort patient_id egfr_bl_value
-by patient_id: replace egfr_bl_value = egfr_bl_value[_n-1] if missing(egfr_bl_value)
 lab var egfr_bl_value "Baseline eGFR at diagnosis"
 lab var egfr_bl_date "Date of eGFR at diagnosis"
 
@@ -898,14 +964,48 @@ gen egfr_before_ult = 1 if (time_egfr_before_ult<=365) & (time_egfr_before_ult>0
 bys patient_id egfr_before_ult (time_egfr_before_ult): gen n=_n if egfr_before_ult==1
 gen egfr_before_ult_value = egfr_value_ if n==1
 lab var egfr_before_ult_value "Baseline eGFR before initiating ULT"
-sort patient_id egfr_before_ult_value
-by patient_id: replace egfr_before_ult_value = egfr_before_ult_value[_n-1] if missing(egfr_before_ult_value)
 tabstat egfr_before_ult_value, stats(n mean sd p50 p25 p75)
 drop n egfr_before_ult time_egfr_before_ult
 
 drop egfr_ckd subsequent_egfr_ckd
 
-reshape wide creatinine_value_ creatinine_date_ egfr_value_ egfr_date_, i(patient_id) j(creatinine_order)
+local summaryvars first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date egfr_bl_value egfr_before_ult_value
+
+**Store variable labels and value-label names before collapse
+local i = 0
+
+foreach v of local summaryvars {
+    local ++i
+    local var`i' "`v'"
+    local varlab`i' : variable label `v'
+    local vallab`i' : value label `v'
+}
+
+local nvars = `i'
+
+**Collapse to one observation per patient
+collapse (max) `summaryvars', by(patient_id) 
+
+**Restore variable labels and value-label assignments
+forvalues i = 1/`nvars' {
+    local v "`var`i''"
+
+    if `"`varlab`i''"' != "" {
+        label variable `v' `"`varlab`i''"'
+    }
+
+    if "`vallab`i''" != "" {
+        label values `v' `vallab`i''
+    }
+}
+
+format first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date %td
+
+save "$projectdir/output/data/egfr_summary.dta", replace
+
+restore
+
+merge 1:1 patient_id using "$projectdir/output/data/egfr_summary.dta", nogen
 
 ***Categorise baseline eGFR into CKD stages
 gen egfr_bl_cat = .
@@ -1019,32 +1119,21 @@ lab define urate_bl_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", 
 lab val urate_bl_cat urate_bl_cat
 tab urate_bl_cat, missing
 
-**If baseline urate level <360, check whether repeat test was performed within 3 months
-gen urate_bl_360_repeat = 0 if urate_bl_cat==1
+***Keep variables of interest before reshaping
+preserve
 
-***Find max number of urate levels
-local max = 0
-capture quietly ds urate_date_*
-if !_rc & "`r(varlist)'" != "" {
-	foreach v of varlist `r(varlist)' {
-		if regexm("`v'","^urate_date_([0-9]+)$") {
-			local idx = real(regexs(1))
-			local max = max(`max', `idx')
-		}
-	}
-}
-di "`max'"
-
-***Find matching urate levels within 3 months after baseline urate (if baseline <360)
-forval i = 1/`max'	{
-	replace urate_bl_360_repeat = 1 if urate_bl_cat==1 & ((urate_date_`i' > urate_bl_date) & (urate_date_`i' <= (urate_bl_date + 90)) & urate_date_`i'!=.)
-}
-lab var urate_bl_360_repeat "Repeat urate level within three months if baseline urate <360"
-lab def urate_bl_360_repeat 0 "No" 1 "Yes"
-lab val urate_bl_360_repeat urate_bl_360_repeat
+keep patient_id ${disease}_inc_date ult_first_date ult_year urate_bl_cat urate_bl_date urate_value_* urate_date_*
 
 ***Reshape to long format
 reshape long urate_value_ urate_date_, i(patient_id) j(urate_order)
+
+***Find matching urate levels within 3 months after baseline urate (if baseline <360)
+gen urate_bl_360_repeat_row = urate_bl_cat == 1 & ((urate_date_ > urate_bl_date) & (urate_date_ <= (urate_bl_date + 90)) & !missing(urate_date_, urate_bl_date))
+bys patient_id: egen urate_bl_360_repeat = max(urate_bl_360_repeat_row)
+lab var urate_bl_360_repeat "Repeat urate level within three months if baseline urate <360"
+lab def urate_bl_360_repeat 0 "No" 1 "Yes", modify
+lab val urate_bl_360_repeat urate_bl_360_repeat
+drop urate_bl_360_repeat_row
 
 ***Define first serum urate <360/300 micromol/L after diagnosis 
 gen time_to_urate = (urate_date_ - ${disease}_inc_date) if urate_date_!=. //time to urate level
@@ -1144,8 +1233,6 @@ foreach target in 300 360 {
 	by patient_id: replace urate_below`target'_ult_date = urate_below`target'_ult_date[_n-1] if missing(urate_below`target'_ult_date)
 	gen urate_below`target'_ult_value = urate_value_ if n==1 & urate_below`target'_ult==1
 	lab var urate_below`target'_ult_value "Value of first serum urate <`target' micromol/L after initiating ULT"
-	sort patient_id urate_below`target'_ult_value
-	by patient_id: replace urate_below`target'_ult_value = urate_below`target'_ult_value[_n-1] if missing(urate_below`target'_ult_value)
 	tabstat urate_below`target'_ult_value, stats(n mean sd p50 p25 p75)
 	drop n urate_below`target'_ult
 }	
@@ -1209,7 +1296,7 @@ foreach t in 12 {
 	***Binary variable, overall (uncoded missing)
 	gen urate_`t'm_ult = 1 if lowest_urate_`t'm_ult<360 & lowest_urate_`t'm_ult!=.
 	replace urate_`t'm_ult = 0 if lowest_urate_`t'm_ult>=360 & lowest_urate_`t'm_ult!=.
-	lab var urate_`t'm_ult  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
+	lab var urate_`t'm_ult  "Serum urate <360 micromol/L within `t' months of ULT initiation"
 	lab def urate_`t'm_ult 0 ">=360 micromol/L" 1 "<360 micromol/L", modify
 	lab val urate_`t'm_ult urate_`t'm_ult
 	
@@ -1217,14 +1304,14 @@ foreach t in 12 {
 	gen urate_`t'm_ult_cat = 1 if lowest_urate_`t'm_ult<360 & lowest_urate_`t'm_ult!=.
 	replace urate_`t'm_ult_cat = 0 if lowest_urate_`t'm_ult>=360 & lowest_urate_`t'm_ult!=.
 	replace urate_`t'm_ult_cat = 9 if lowest_urate_`t'm_ult==. //includes those who didn't receive ULT
-	lab var urate_`t'm_ult_cat  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
+	lab var urate_`t'm_ult_cat  "Serum urate <360 micromol/L within `t' months of ULT initiation"
 	lab def urate_`t'm_ult_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", modify
 	lab val urate_`t'm_ult_cat urate_`t'm_ult_cat
 	
 	***Binary variable, overall (missing recoded as not attained)
 	gen urate_`t'm_ult_recode = urate_`t'm_ult
 	replace urate_`t'm_ult_recode = 0 if urate_`t'm_ult ==. //includes those who didn't receive ULT
-	lab var urate_`t'm_ult_recode  "Serum urate <`target' micromol/L within `t' months of ULT initiation"
+	lab var urate_`t'm_ult_recode  "Serum urate <360 micromol/L within `t' months of ULT initiation"
 	lab def urate_`t'm_ult_recode 0 ">=360 micromol/L or not known" 1 "<360 micromol/L", modify
 	lab val urate_`t'm_ult_recode urate_`t'm_ult_recode
 		
@@ -1256,12 +1343,67 @@ gen urate_before_ult = 1 if (time_urate_before_ult<=365) & (time_urate_before_ul
 bys patient_id urate_before_ult (time_urate_before_ult): gen n=_n if urate_before_ult==1
 gen urate_before_ult_value = urate_value_ if n==1
 lab var urate_before_ult_value "Baseline serum urate level before initiating ULT"
-sort patient_id urate_before_ult_value
-by patient_id: replace urate_before_ult_value = urate_before_ult_value[_n-1] if missing(urate_before_ult_value)
 tabstat urate_before_ult_value, stats(n mean sd p50 p25 p75)
 drop n time_urate_before_ult urate_before_ult
 
-reshape wide urate_value_ urate_date_, i(patient_id) j(urate_order)
+**Store variables of interest
+***Variables not dependent on target or timepoint
+local summaryvars urate_bl_360_repeat urate_after_diag urate_after_ult urate_before_ult_value
+
+***Variables dependent on target
+foreach target in 300 360 {
+    local summaryvars `summaryvars' urate_below`target'_date urate_below`target'_value urate_below`target'_ult_date urate_below`target'_ult_value
+}
+
+***Variables dependent on follow-up time
+foreach t in 12 {
+    local summaryvars `summaryvars' urate_`t'm urate_count_`t'm two_urate_`t'm lowest_urate_`t'm repeat_after360_`t'm_ult repeat_below360_`t'm_ult urate_within_`t'm_ult urate_count_`t'm_ult two_urate_`t'm_ult lowest_urate_`t'm_ult urate_`t'm_ult urate_`t'm_ult_cat urate_`t'm_ult_recode
+
+    ***Variables dependent on both target and timepoint
+    foreach target in 300 360 {
+        local summaryvars `summaryvars' urate_`target'_`t'm_cat urate_`target'_`t'm
+    }
+
+    ***Year-specific variables
+    forvalues i = 1/$max_year {
+        local start = $base_year + `i' - 1
+        local summaryvars `summaryvars' urate_`t'm_ult_cat_`start'
+    }
+}
+
+**Store variable labels and value-label names before collapse
+local i = 0
+
+foreach v of local summaryvars {
+    local ++i
+    local var`i' "`v'"
+    local varlab`i' : variable label `v'
+    local vallab`i' : value label `v'
+}
+
+local nvars = `i'
+
+**Collapse to one observation per patient
+collapse (max) `summaryvars', by(patient_id) 
+
+**Restore variable labels and value-label assignments
+forvalues i = 1/`nvars' {
+    local v "`var`i''"
+
+    if `"`varlab`i''"' != "" {
+        label variable `v' `"`varlab`i''"'
+    }
+
+    if "`vallab`i''" != "" {
+        label values `v' `vallab`i''
+    }
+}
+
+save "$projectdir/output/data/urate_summary.dta", replace
+
+restore
+
+merge 1:1 patient_id using "$projectdir/output/data/urate_summary.dta", nogen
 
 save "$projectdir/output/data/cohort_bloods.dta", replace
 
@@ -1271,41 +1413,49 @@ use "$projectdir/output/data/cohort_bloods.dta", clear
 
 **Criteria for defining flares adapted from https://jamanetwork.com/journals/jama/fullarticle/2794763: 1) presence of a non-index diagnostic code for gout flare (specified by dedicated flare codelist); 2) non-index admission with primary gout diagnostic code; 3) non-index ED attendance with primary gout diagnostic code; 4) any non-index gout diagnostic code AND prescription for a flare treatment on same day as that code. Exclude events that occur within 14 days of one another (handled in dataset definition for 1, 2 and 3)
 
-**Store list of admissions with primary gout diagnostic codes
+**Store admission dates
 preserve
+keep patient_id gout_adm_date_*
 reshape long gout_adm_date_, i(patient_id) j(admission_order)
-gen flare_overall_date=gout_adm_date_
-format %td flare_overall_date
+drop if missing(gout_adm_date_)
+rename gout_adm_date_ flare_overall_date
+format flare_overall_date %td
 keep patient_id flare_overall_date
 save "$projectdir/output/data/adm_dates_long.dta", replace
 restore
 
-**Store list of ED attendances with primary gout diagnostic codes
+**Store ED attendance dates
 preserve
+keep patient_id gout_ed_date_*
 reshape long gout_ed_date_, i(patient_id) j(emerg_order)
-gen flare_overall_date=gout_ed_date_
-format %td flare_overall_date
+drop if missing(gout_ed_date_)
+rename gout_ed_date_ flare_overall_date
+format flare_overall_date %td
 keep patient_id flare_overall_date
 save "$projectdir/output/data/emerg_dates_long.dta", replace
 restore
 
-**Store list of gout flare code dates with primary gout diagnostic codes
+**Store gout flare-code dates
 preserve
-reshape long flare_date_ , i(patient_id) j(flare_order)
-gen flare_overall_date=flare_date_
-format %td flare_overall_date
+keep patient_id flare_date_*
+reshape long flare_date_, i(patient_id) j(flare_order)
+drop if missing(flare_date_)
+rename flare_date_ flare_overall_date
+format flare_overall_date %td
 keep patient_id flare_overall_date
 save "$projectdir/output/data/flare_dates_long.dta", replace
 restore
 
-**Store list of gout consultations with prescriptions for flare medications on the same date
-reshape long gout_cons_date_ , i(patient_id) j(consult_order)
-gen code_and_tx_date_=.
-format %td code_and_tx_date_
+**Store gout consultations with same-day flare treatment
+keep patient_id ${disease}_inc_date gout_cons_date_* colchicine_date_* nsaid_date_* steroid_date_*
+reshape long gout_cons_date_, i(patient_id) j(consult_order)
+drop if missing(gout_cons_date_)
+gen code_and_tx_date_ =.
+format code_and_tx_date_ %td
 
 ***Find matching consult and treatment dates
-forval i = 1/$max_prescription {
-	replace code_and_tx_date_ = gout_cons_date_ if gout_cons_date_ == colchicine_date_`i' & colchicine_date_`i'!=. & gout_cons_date_!=. | gout_cons_date_ == nsaid_date_`i' & nsaid_date_`i'!=. & gout_cons_date_!=. | gout_cons_date_ == steroid_date_`i' & steroid_date_`i'!=. & gout_cons_date_!=.
+forvalues i = 1/$max_prescription {
+    replace code_and_tx_date_ = gout_cons_date_ if !missing(gout_cons_date_) & (gout_cons_date_ == colchicine_date_`i' | gout_cons_date_ == nsaid_date_`i' | gout_cons_date_ == steroid_date_`i')
 }
 replace code_and_tx_date_=. if (code_and_tx_date_ < (${disease}_inc_date+14)) & code_and_tx_date_!=. //remove events within 14 days after diagnosis 
 
@@ -1314,14 +1464,15 @@ sort patient_id code_and_tx_date_
 local changed 1
 while `changed' {
     bys patient_id (code_and_tx_date_): gen n=_n
-    quietly count if n>1 & ((code_and_tx_date_-14)<(code_and_tx_date_[_n-1])) & code_and_tx_date_!=. & code_and_tx_date_[_n-1]!=.
+    quietly count if n > 1 & !missing(code_and_tx_date_, code_and_tx_date_[_n-1]) & (code_and_tx_date_ - code_and_tx_date_[_n-1]) < 14
     local changed = r(N)
-    replace code_and_tx_date_=. if n>1 & ((code_and_tx_date_-14)<(code_and_tx_date_[_n-1])) & code_and_tx_date_!=. & code_and_tx_date_[_n-1]!=.
+    replace code_and_tx_date_ = . if n > 1 & !missing(code_and_tx_date_, code_and_tx_date_[_n-1]) & (code_and_tx_date_ - code_and_tx_date_[_n-1]) < 14
     drop n
-	***Check log to see how many are being removed in each iteration
 }
-gen flare_overall_date=code_and_tx_date_
-format %td flare_overall_date
+
+rename code_and_tx_date_ flare_overall_date
+format flare_overall_date %td
+drop if missing(flare_overall_date)
 keep patient_id flare_overall_date
 save "$projectdir/output/data/code_and_tx_dates_long.dta", replace
 
@@ -1335,18 +1486,16 @@ sort patient_id flare_overall_date
 local changed 1
 while `changed' {
     bys patient_id (flare_overall_date): gen n=_n
-    quietly count if n>1 & ((flare_overall_date-14)<(flare_overall_date[_n-1])) & flare_overall_date!=. & flare_overall_date[_n-1]!=.
+    quietly count if n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1]) < 14
     local changed = r(N)
-    replace flare_overall_date=. if n>1 & ((flare_overall_date-14)<(flare_overall_date[_n-1])) & flare_overall_date!=. & flare_overall_date[_n-1]!=.
+    replace flare_overall_date = . if n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1]) < 14
     drop n
-	***Check log to see how many are being removed in each iteration
 }
 
 **Generate overall flare counts and first post-diagnosis flare date
 bys patient_id (flare_overall_date): gen n=_n if flare_overall_date!=.
 by patient_id: egen flare_overall_count=max(n) //count of flares/admissions/ED after diagnosis
 lab var flare_overall_count "Number of gout flares after diagnosis"
-recode flare_overall_count .=0
 drop n
 bys patient_id (flare_overall_date): gen n=_n
 drop if n>1 & flare_overall_date==. //drop missing values after the first row
@@ -1359,8 +1508,12 @@ rename flare_overall_date flare_overall_date_
 save "$projectdir/output/data/flares.dta", replace
 
 **Keep long format and merge original data to obtain flare treatment and blood data
-use "$projectdir/output/data/flares.dta", clear
-merge m:1 patient_id using "$projectdir/output/data/cohort_bloods.dta", keep(match) nogen
+use "$projectdir/output/data/cohort_bloods.dta", clear
+isid patient_id
+merge 1:m patient_id using "$projectdir/output/data/flares.dta", keep(master match) nogen
+
+replace flare_overall_count = 0 if missing(flare_overall_count)
+label variable flare_overall_count "Number of gout flares after diagnosis"
 
 **Flare dates that received colchicine vs. NSAIDs vs. steroids on same day
 gen flare_drug_ = 0 if flare_overall_date_!=.
@@ -1382,6 +1535,9 @@ save "$projectdir/output/data/flares_long.dta", replace
 restore
 
 **Revert to wide format
+replace flare_overall_order = 1 if missing(flare_overall_order)
+isid patient_id flare_overall_order
+
 reshape wide flare_overall_date_ flare_drug_, i(patient_id) j(flare_overall_order)
 
 **Check whether at least 12 months of follow-up after first flare
@@ -1449,8 +1605,10 @@ if !_rc & "`r(varlist)'" != "" {
 di "`max'"
 
 ***Find matching urate levels within 3 months after baseline urate (if baseline <360)
-forval i = 1/`max'	{
+if `max' > 0 {
+    forvalues i = 1/`max' {
 	replace post_flare_urate = 1 if first_flare_overall_date!=. & ((urate_date_`i' > first_flare_overall_date) & (urate_date_`i' <= (first_flare_overall_date + 90)) & urate_date_`i'!=.)
+	}
 }
 lab var post_flare_urate "Urate level within three months of first non-index flare"
 lab def post_flare_urate 0 "No" 1 "Yes"
@@ -1501,21 +1659,31 @@ lab def ult_risk_bl 0 "No" 1 "Yes", modify
 lab val ult_risk_bl ult_risk_bl
 
 **Check whether ULT prescribed when became high risk (or at diagnosis if before gout diagnosis) - a prescription 6m before or up to 6/12m afterwards
+preserve 
+
+keep patient_id ult_risk_date_dx ult_date_*
 
 reshape long ult_date_, i(patient_id) j(ult_order)
 
 foreach t in 12 {
 	
 	local days = int((`t'/12)*365.25)
-	di `days' 
 	
-	gen ult_risk_p_`t'm = 1 if ult_risk_date_dx!=. & ult_date_!=. & (ult_date_ >= (ult_risk_date_dx - 183)) & (ult_date_ <= (ult_risk_date_dx + `days')) 
-	sort patient_id ult_risk_p_`t'm
-	by patient_id: replace ult_risk_p_`t'm= ult_risk_p_`t'm[_n-1] if missing(ult_risk_p_`t'm)
-	recode ult_risk_p_`t'm .=0 if ult_risk_date_dx!=. 
+	gen ult_risk_p_`t'm_row = !missing(ult_risk_date_dx, ult_date_) & (ult_date_ >= (ult_risk_date_dx - 183)) & (ult_date_ <= (ult_risk_date_dx + `days'))
+    by patient_id: egen ult_risk_p_`t'm = max(ult_risk_p_`t'm_row)
+    replace ult_risk_p_`t'm = . if missing(ult_risk_date_dx)
+    drop ult_risk_p_`t'm_row
 }
 
-reshape wide ult_date_, i(patient_id) j(ult_order)
+keep patient_id ult_risk_p_*
+bysort patient_id: keep if _n == 1
+
+save "$projectdir/output/data/ult_risk_summary.dta", replace
+
+restore 
+
+isid patient_id
+merge 1:1 patient_id using "$projectdir/output/data/ult_risk_summary.dta", nogen
 
 foreach t in 12 {
 	

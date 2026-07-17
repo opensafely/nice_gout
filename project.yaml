@@ -232,16 +232,6 @@ actions:
         data1: output/data/cohort_processed.dta
         data2: output/data/flares_long.dta
 
-  cohort_cleaning_new:
-    run: stata-mp:latest analysis/200_cohort_cleaning_new.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
-    needs: [generate_dataset_primary, measures_practice_gout]
-    outputs:
-      highly_sensitive:
-        log1: logs/cohort_cleaning_new.log   
-        data1: output/data/cohort_processed2.dta
-        data2: output/data/flares_long2.dta
-
-
   data_tables:
     run: stata-mp:latest analysis/300_data_tables.do "gout" "agegroup|sex|ethnicity|imd|region" "rheumatology"
     needs: [cohort_cleaning]
