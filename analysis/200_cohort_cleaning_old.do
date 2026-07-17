@@ -25,7 +25,7 @@ capture mkdir "$projectdir/output/tables"
 *Open log file
 global logdir "$projectdir/logs"
 cap log close
-log using "$logdir/cohort_cleaning_new.log", replace
+log using "$logdir/cohort_cleaning.log", replace
 log off
 
 *Set Ado file path
@@ -429,11 +429,11 @@ foreach feature in $disease_features {
 	tab `feature'_new, missing
 }
 
-save "$projectdir/output/data/cohort_generic2.dta", replace
+save "$projectdir/output/data/cohort_generic.dta", replace
 
 *Disease-specific medications (amend as necessary) =================================*/
 
-use "$projectdir/output/data/cohort_generic2.dta", clear
+use "$projectdir/output/data/cohort_generic.dta", clear
 
 **Specify drug of interest: diuretics =============*/
 foreach drug in diuretic sglt2 ace_arb {
@@ -693,11 +693,11 @@ lab var febux_mace "Febuxostat prescribed in those with MACE"
 lab define febux_mace 0 "No" 1 "Yes"
 lab val febux_mace febux_mace
 
-save "$projectdir/output/data/cohort_meds2.dta", replace
+save "$projectdir/output/data/cohort_meds.dta", replace
 
 *Relevant blood tests (passed from yaml, but amend thresholds as necessary) ===================================================*/
 
-use "$projectdir/output/data/cohort_meds2.dta", clear
+use "$projectdir/output/data/cohort_meds.dta", clear
 
 *local blood "urate"
 foreach blood in $bloods {
@@ -1263,11 +1263,11 @@ drop n time_urate_before_ult urate_before_ult
 
 reshape wide urate_value_ urate_date_, i(patient_id) j(urate_order)
 
-save "$projectdir/output/data/cohort_bloods2.dta", replace
+save "$projectdir/output/data/cohort_bloods.dta", replace
 
 *For clinical events (flares, admissions, ED attendances), perform bespoke cleaning (amend as necessary) ==============================================================================*/
 
-use "$projectdir/output/data/cohort_bloods2.dta", clear
+use "$projectdir/output/data/cohort_bloods.dta", clear
 
 **Criteria for defining flares adapted from https://jamanetwork.com/journals/jama/fullarticle/2794763: 1) presence of a non-index diagnostic code for gout flare (specified by dedicated flare codelist); 2) non-index admission with primary gout diagnostic code; 3) non-index ED attendance with primary gout diagnostic code; 4) any non-index gout diagnostic code AND prescription for a flare treatment on same day as that code. Exclude events that occur within 14 days of one another (handled in dataset definition for 1, 2 and 3)
 
@@ -1277,7 +1277,7 @@ reshape long gout_adm_date_, i(patient_id) j(admission_order)
 gen flare_overall_date=gout_adm_date_
 format %td flare_overall_date
 keep patient_id flare_overall_date
-save "$projectdir/output/data/adm_dates_long2.dta", replace
+save "$projectdir/output/data/adm_dates_long.dta", replace
 restore
 
 **Store list of ED attendances with primary gout diagnostic codes
@@ -1286,7 +1286,7 @@ reshape long gout_ed_date_, i(patient_id) j(emerg_order)
 gen flare_overall_date=gout_ed_date_
 format %td flare_overall_date
 keep patient_id flare_overall_date
-save "$projectdir/output/data/emerg_dates_long2.dta", replace
+save "$projectdir/output/data/emerg_dates_long.dta", replace
 restore
 
 **Store list of gout flare code dates with primary gout diagnostic codes
@@ -1295,7 +1295,7 @@ reshape long flare_date_ , i(patient_id) j(flare_order)
 gen flare_overall_date=flare_date_
 format %td flare_overall_date
 keep patient_id flare_overall_date
-save "$projectdir/output/data/flare_dates_long2.dta", replace
+save "$projectdir/output/data/flare_dates_long.dta", replace
 restore
 
 **Store list of gout consultations with prescriptions for flare medications on the same date
@@ -1323,12 +1323,12 @@ while `changed' {
 gen flare_overall_date=code_and_tx_date_
 format %td flare_overall_date
 keep patient_id flare_overall_date
-save "$projectdir/output/data/code_and_tx_dates_long2.dta", replace
+save "$projectdir/output/data/code_and_tx_dates_long.dta", replace
 
 **Append admissions, ED attendances and flare codes
-append using "$projectdir/output/data/emerg_dates_long2.dta"
-append using "$projectdir/output/data/adm_dates_long2.dta"
-append using "$projectdir/output/data/flare_dates_long2.dta"
+append using "$projectdir/output/data/emerg_dates_long.dta"
+append using "$projectdir/output/data/adm_dates_long.dta"
+append using "$projectdir/output/data/flare_dates_long.dta"
 
 **Remove events that occur within 14 days of one another (repeat this until no further events within 14 days of one another)
 sort patient_id flare_overall_date
@@ -1356,11 +1356,11 @@ lab var first_flare_overall_date "Date of first flare after diagnosis"
 by patient_id: replace first_flare_overall_date= first_flare_overall_date[_n-1] if missing(first_flare_overall_date)
 rename n flare_overall_order
 rename flare_overall_date flare_overall_date_
-save "$projectdir/output/data/flares2.dta", replace
+save "$projectdir/output/data/flares.dta", replace
 
 **Keep long format and merge original data to obtain flare treatment and blood data
-use "$projectdir/output/data/flares2.dta", clear
-merge m:1 patient_id using "$projectdir/output/data/cohort_bloods2.dta", keep(match) nogen
+use "$projectdir/output/data/flares.dta", clear
+merge m:1 patient_id using "$projectdir/output/data/cohort_bloods.dta", keep(match) nogen
 
 **Flare dates that received colchicine vs. NSAIDs vs. steroids on same day
 gen flare_drug_ = 0 if flare_overall_date_!=.
@@ -1378,7 +1378,7 @@ lab val flare_drug_ flare_drug_
 **Save a long format dta for downstream flare analyses
 preserve
 keep patient_id flare_overall_date_ flare_drug_ $demographic
-save "$projectdir/output/data/flares_long2.dta", replace
+save "$projectdir/output/data/flares_long.dta", replace
 restore
 
 **Revert to wide format
@@ -1525,11 +1525,11 @@ foreach t in 12 {
 	tab ult_risk_p_`t'm, missing
 }
 
-save "$projectdir/output/data/cohort_events2.dta", replace
+save "$projectdir/output/data/cohort_events.dta", replace
 
 *Admissions and referrals (amend as necessary) ================================================================*/
 
-use "$projectdir/output/data/cohort_events2.dta", clear
+use "$projectdir/output/data/cohort_events.dta", clear
 
 **Any recorded appointment with specialty (passed from YAML; can loop if necessary) in the 12 months before diagnosis (restricted by dataset definition)
 gen ${outpatients}_opa_before = 1 if (${outpatients}_opa_date < ${disease}_inc_date) & ${outpatients}_opa_date!=.
@@ -1623,11 +1623,11 @@ foreach t in 12 {
 	tab ${outpatients}_refopa_`t'm_risk, missing
 }
 
-save "$projectdir/output/data/cohort_processed_outpatients2.dta", replace
+save "$projectdir/output/data/cohort_processed_outpatients.dta", replace
 
 *Further cleaning for landmark survival analyes=====================
 
-use "$projectdir/output/data/cohort_processed_outpatients2.dta", clear
+use "$projectdir/output/data/cohort_processed_outpatients.dta", clear
 
 **CKD status with relation to ULT initiation date
 gen ckd_pre_ult = 0
@@ -1713,7 +1713,7 @@ foreach drug in diuretic sglt2 ace_arb {
 	lab val `drug'_land `drug'_land
 }
 
-save "$projectdir/output/data/cohort_processed_prepractice2.dta", replace
+save "$projectdir/output/data/cohort_processed_prepractice.dta", replace
 
 *Generate practice-level summary counts=================================
 
@@ -1726,17 +1726,17 @@ rename ratio practice_${disease}_ratio
 lab var practice_${disease}_ratio "Disease to list size ratio"
 order practice_id, first
 keep practice*
-save "$projectdir/output/data/measures_practice2.dta", replace
+save "$projectdir/output/data/measures_practice.dta", replace
 
 **Merge with cleaned dataset
-use "$projectdir/output/data/cohort_processed_prepractice2.dta", clear
-merge m:1 practice_id using "$projectdir/output/data/measures_practice2.dta"
+use "$projectdir/output/data/cohort_processed_prepractice.dta", clear
+merge m:1 practice_id using "$projectdir/output/data/measures_practice.dta"
 drop if _merge==2
 drop _merge
 tabstat practice_${disease}_n, stat(n mean sd p50 p25 p75)
 tabstat practice_list_n, stat(n mean sd p50 p25 p75)
 tabstat practice_${disease}_ratio, stat(n mean sd p50 p25 p75)
 
-save "$projectdir/output/data/cohort_processed2.dta", replace
+save "$projectdir/output/data/cohort_processed.dta", replace
 
 log close
