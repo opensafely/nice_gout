@@ -1261,8 +1261,10 @@ foreach t in 12 {
 	replace repeat_below360_`t'm_ult = . if repeat_after360_`t'm_ult != 1
 	drop repeat_after360_`t'm_ult_row repeat_below360_`t'm_ult_row
 	lab var repeat_after360_`t'm_ult "Repeat urate test 6–12 months after achieving target <360 micromol/L"
+	label define repeat_after360_`t'm_ult 0 "No" 1 "Yes", replace
+label val repeat_after360_`t'm_ult repeat_after360_`t'm_ult
 	lab var repeat_below360_`t'm_ult "Repeat urate remained <360 micromol/L"
-	lab def repeat_below360_`t'm_ult 0 "No" 1 "Yes"
+	lab def repeat_below360_`t'm_ult 0 "No" 1 "Yes", replace
 	lab val repeat_below360_`t'm_ult repeat_below360_`t'm_ult
 	tab repeat_below360_`t'm_ult, missing 
 	
