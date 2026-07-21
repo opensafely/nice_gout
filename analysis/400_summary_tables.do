@@ -191,7 +191,7 @@ foreach outcome of varlist `blood_vars_value_bl' age {
 use "$projectdir/output/data/summary_table_`cohort'.dta", clear
 export delimited using "$projectdir/output/tables/summary_table_`cohort'.csv", datafmt replace
 
-*Summary table of disease-specific events occurring within 6/12m of diagnosis ========================*
+*Summary table of disease-specific events occurring within t m of diagnosis ========================*
 
 **Store table name
 local cohort "postdiagnosis"
@@ -225,7 +225,6 @@ foreach t in 12 {
 	
 	**Process OPA outcome only from July 2019 onwards
 	preserve
-	
 		keep if ${disease}_moyear >= tm(2019m7)
 		
 		rounded_categorical `outpatients_refopa_`t'm', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
@@ -242,7 +241,7 @@ foreach t in 12 {
 	export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
 }
 
-*Summary table of disease-specific events occurring within 6/12m of ULT initiation ========================*
+*Summary table of disease-specific events occurring within t m of ULT initiation ========================*
 
 **Store table name
 local cohort "postult"
@@ -256,11 +255,11 @@ foreach t in 12 {
 	**Load processed dataset
 	use "$projectdir/output/data/cohort_processed.dta", clear
 	
-	**Set inclusion criteria - limited to those with minimum duration of follow-up and ULT initiation
-	keep if has_`t'm_fup==1 & ult_`t'm==1
+	**Set inclusion criteria - limited to those who had at least t months duration of follow-up post-ULT (no restriction on ULT within 12m)
+	keep if has_`t'm_fup_ult==1
 
-	**Process catergorical outcomes of interest
-	foreach outcome of varlist repeat_below360_`t'm_ult repeat_after360_`t'm_ult ult_prophylaxis_`t'm urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult {
+	**Process catergorical outcomes of interest //different ULT prophylaxis to graphs
+	foreach outcome of varlist urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult {
 		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
 	}
 
@@ -272,6 +271,46 @@ foreach t in 12 {
 	**Export to CSV
 	use "$projectdir/output/data/summary_table_`t'm`cohort'.dta", clear
 	export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
+}
+
+*Summary table of disease-specific events occurring within t m of urate target attainment ========================*
+
+**Store table name
+local cohort "posttarget"
+
+**Loop through time periods of interest
+foreach t in 12 {
+	
+	**Erase any existing data file
+	capture erase "$projectdir/output/data/summary_table_`t'm`cohort'.dta"
+	
+	**Load processed dataset
+	use "$projectdir/output/data/cohort_processed.dta", clear
+	
+	**Set inclusion criteria - limited to those who had at least t months duration of follow-up post-target attainment (no restriction on ULT/target within 12m)
+	keep if has_`t'm_fup_target==1
+	
+	**Check - for dummy data only
+	count
+	if r(N) == 0 {
+		di as text "No observations with has_`t'm_fup_target == 1; skipping `t'-month summary table"
+		continue
+	}
+
+	**Process catergorical outcomes of interest //different ULT prophylaxis to graphs
+	foreach outcome of varlist repeat_below360_`t'm_ult repeat_after360_`t'm_ult {
+		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
+	}
+	
+	**Export to CSV - with added check for dummy data
+	capture confirm file "$projectdir/output/data/summary_table_`t'm`cohort'.dta"
+	if _rc == 0 {
+		use "$projectdir/output/data/summary_table_`t'm`cohort'.dta", clear
+		export delimited using "$projectdir/output/tables/summary_table_`t'm`cohort'.csv", datafmt replace
+	}
+	else {
+		di as text "No summary table created for `t'-month `cohort'; skipping export."
+	}
 }
 
 /*Generate unrounded tables for checking (not outputted) ==============================*
