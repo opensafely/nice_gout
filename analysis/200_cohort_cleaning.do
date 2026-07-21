@@ -491,7 +491,8 @@ foreach t in 12 {
 
 	****Proportion of patients with at least 6/12 months of GP registration after first prescription - can subsequently limit this to those who initiated within 6/12m of diagnosis 
 	gen has_`t'm_fup_`drug'=1 if (reg_end_date!=. & (reg_end_date >= (`drug'_first_date + `days')) & ((`drug'_first_date + `days') <= (date("$studyfup_date", "YMD")))) | (reg_end_date==. & ((`drug'_first_date + `days') <= (date("$studyfup_date", "YMD"))))
-	recode has_`t'm_fup_`drug' .=0 //includes those who didn't initiate drug
+	replace has_`t'm_fup_`drug' = 0 if missing(has_`t'm_fup_`drug') & !missing(`drug'_first_date)
+	replace has_`t'm_fup_`drug' = . if missing(`drug'_first_date)
 	lab var has_`t'm_fup_`drug' "At least `t' months of follow-up after `Drug' initiation"
 	lab def has_`t'm_fup_`drug' 0 "No" 1 "Yes"
 	lab val has_`t'm_fup_`drug' has_`t'm_fup_`drug'
@@ -1122,7 +1123,7 @@ tab urate_bl_cat, missing
 ***Keep variables of interest before reshaping
 preserve
 
-keep patient_id ${disease}_inc_date ult_first_date ult_year urate_bl_cat urate_bl_date urate_value_* urate_date_*
+keep patient_id ${disease}_inc_date ult_first_date ult_year urate_bl_cat urate_bl_date urate_value_* urate_date_* reg_end_date
 
 ***Reshape to long format
 reshape long urate_value_ urate_date_, i(patient_id) j(urate_order)
@@ -1130,6 +1131,7 @@ reshape long urate_value_ urate_date_, i(patient_id) j(urate_order)
 ***Find matching urate levels within 3 months after baseline urate (if baseline <360)
 gen urate_bl_360_repeat_row = urate_bl_cat == 1 & ((urate_date_ > urate_bl_date) & (urate_date_ <= (urate_bl_date + 90)) & !missing(urate_date_, urate_bl_date))
 bys patient_id: egen urate_bl_360_repeat = max(urate_bl_360_repeat_row)
+replace urate_bl_360_repeat =. if urate_bl_cat != 1
 lab var urate_bl_360_repeat "Repeat urate level within three months if baseline urate <360"
 lab def urate_bl_360_repeat 0 "No" 1 "Yes", modify
 lab val urate_bl_360_repeat urate_bl_360_repeat
@@ -1174,7 +1176,7 @@ foreach t in 12 {
 	recode urate_count_`t'm .=0
 	lab var urate_count_`t'm "Number of urate levels within `t' months of diagnosis"
 	gen two_urate_`t'm = 1 if urate_count_`t'm >=2 & urate_count_`t'm!=. //two or more urate tests performed within 6/12 months of diagnosis
-	recode two_urate_`t'm .=0 //includes those who didn't receive ULT
+	recode two_urate_`t'm .=0 
 	lab var two_urate_`t'm "Two or more serum urate tests performed within `t' months of diagnosis"
 	lab def two_urate_`t'm 0 "No" 1 "Yes", modify
 	lab val two_urate_`t'm two_urate_`t'm
@@ -1239,7 +1241,8 @@ foreach target in 300 360 {
 
 sort patient_id urate_after_ult
 by patient_id: replace urate_after_ult = urate_after_ult[_n-1] if missing(urate_after_ult)
-recode urate_after_ult .=0
+replace urate_after_ult = 0 if missing(urate_after_ult) & !missing(ult_first_date)
+replace urate_after_ult = . if missing(ult_first_date)
 lab var urate_after_ult "Urate test performed after initiating ULT"
 lab def urate_after_ult 0 "No" 1 "Yes"
 lab val urate_after_ult urate_after_ult
@@ -1249,39 +1252,47 @@ foreach t in 12 {
 	local days = int((`t'/12)*365.25)
 	di `days'
 	
-	***For those who attained serum urate target (at any point), was urate repeated after 12 months (between 6 and 12 months afterwards) - can then limit this to a timeframe after ULT initiation
-	gen repeat_after360_`t'm_ult = 1 if urate_below360_ult_date!=. & urate_date_!=. & (urate_date_ > (urate_below360_ult_date + 183)) & (urate_date_ <= (urate_below360_ult_date + 365))
-	gen repeat_below360_`t'm_ult = 1 if repeat_after360_`t'm_ult == 1 & urate_value_<360
-	sort patient_id repeat_after360_`t'm_ult
-	by patient_id: replace repeat_after360_`t'm_ult = repeat_after360_`t'm_ult[_n-1] if missing(repeat_after360_`t'm_ult)
-	lab var repeat_after360_`t'm_ult "Repeat serum urate test performed after achieving target <360 micromol/L following ULT initiation"
-	recode repeat_after360_`t'm_ult .=0 if urate_below360_ult_date!=.
-	lab def repeat_after360_`t'm_ult 0 "No" 1 "Yes"
-	lab val repeat_after360_`t'm_ult repeat_after360_`t'm_ult
-	tab repeat_after360_`t'm_ult, missing 
-	sort patient_id repeat_below360_`t'm_ult
-	by patient_id: replace repeat_below360_`t'm_ult = repeat_below360_`t'm_ult[_n-1] if missing(repeat_below360_`t'm_ult)
-	lab var repeat_below360_`t'm_ult "Repeat serum urate level remains <360 micromol/L following ULT initiation" 
-	recode repeat_below360_`t'm_ult .=0 if repeat_after360_`t'm_ult==1
+	***For those who attained serum urate target (at any point), was urate repeated between 6 and 12 months afterwards
+	gen repeat_after360_`t'm_ult_row = (urate_date_ > urate_below360_ult_date + 183) & (urate_date_ <= urate_below360_ult_date + 365) if !missing(urate_below360_ult_date, urate_date_)
+	bys patient_id: egen repeat_after360_`t'm_ult = max(repeat_after360_`t'm_ult_row)
+	gen repeat_below360_`t'm_ult_row = urate_value_ < 360 if repeat_after360_`t'm_ult_row == 1 & !missing(urate_value_)
+	bys patient_id: egen repeat_below360_`t'm_ult = max(repeat_below360_`t'm_ult_row)
+	replace repeat_after360_`t'm_ult = . if missing(urate_below360_ult_date)
+	replace repeat_below360_`t'm_ult = . if repeat_after360_`t'm_ult != 1
+	drop repeat_after360_`t'm_ult_row repeat_below360_`t'm_ult_row
+	lab var repeat_after360_`t'm_ult "Repeat urate test 6–12 months after achieving target <360 micromol/L"
+	lab var repeat_below360_`t'm_ult "Repeat urate remained <360 micromol/L"
 	lab def repeat_below360_`t'm_ult 0 "No" 1 "Yes"
 	lab val repeat_below360_`t'm_ult repeat_below360_`t'm_ult
 	tab repeat_below360_`t'm_ult, missing 
+	
+	**Check whether at least 12 months of follow-up after urate attainment
+	gen has_`t'm_fup_target=1 if (reg_end_date!=. & (reg_end_date >= (urate_below360_ult_date + `days')) & ((urate_below360_ult_date + `days') <= (date("$studyfup_date", "YMD")))) | (reg_end_date==. & ((urate_below360_ult_date + `days') <= (date("$studyfup_date", "YMD"))))
+	replace has_`t'm_fup_target = 0 if missing(has_`t'm_fup_target) & !missing(urate_below360_ult_date)
+	replace has_`t'm_fup_target = . if missing(urate_below360_ult_date)
+	lab var has_`t'm_fup_target "At least `t' months of follow-up after target attainment"
+	lab def has_`t'm_fup_target 0 "No" 1 "Yes"
+	lab val has_`t'm_fup_target has_`t'm_fup_target
+	tab has_`t'm_fup_target
 
-	***Define proportion of patients who attained serum urate <360 micromol/L within 6/12 months of initiating ULT - can subsequently limit this to those who initiated ULT within 6/12m of diagnosis and those with 6/12m of follow-up post-ULT
+	***Define proportion of patients who attained serum urate <360 micromol/L within 6/12 months of initiating ULT
 	gen urate_within_`t'm_ult = 1 if (time_ult_to_urate>0 & time_ult_to_urate<=`days') & urate_value_!=. //test done within 6/12 months of ULT initiation
 	bys patient_id (urate_within_`t'm_ult): gen n=_n if urate_within_`t'm_ult!=.
 	by patient_id: egen urate_count_`t'm_ult = max(n) //number of tests within 6/12 months of ULT initiation
-	recode urate_count_`t'm_ult .=0
+	replace urate_count_`t'm_ult = 0 if missing(urate_count_`t'm_ult) & !missing(ult_first_date)
+	replace urate_count_`t'm_ult = . if missing(ult_first_date)
 	lab var urate_count_`t'm_ult "Number of serum urate tests within `t' months of ULT initiation"
 	gen two_urate_`t'm_ult = 1 if urate_count_`t'm_ult >=2 & urate_count_`t'm_ult!=. //two or more urate tests performed within 6/12 months of ULT initiation
-	recode two_urate_`t'm_ult .=0 //includes those who didn't receive ULT
+	replace two_urate_`t'm_ult = 0 if missing(two_urate_`t'm_ult) & !missing(ult_first_date)
+	replace two_urate_`t'm_ult = . if missing(ult_first_date)
 	lab var two_urate_`t'm_ult "Two or more serum urate tests performed within `t' months of ULT initiation"
 	lab def two_urate_`t'm_ult 0 "No" 1 "Yes", modify
 	lab val two_urate_`t'm_ult two_urate_`t'm_ult
 	drop n
 	sort patient_id urate_within_`t'm_ult
 	by patient_id: replace urate_within_`t'm_ult= urate_within_`t'm_ult[_n-1] if missing(urate_within_`t'm_ult)
-	recode urate_within_`t'm_ult .=0 //includes those who didn't receive ULT
+	replace urate_within_`t'm_ult = 0 if missing(urate_within_`t'm_ult) & !missing(ult_first_date)
+	replace urate_within_`t'm_ult = . if missing(ult_first_date)
 	lab var urate_within_`t'm_ult "Serum urate test performed within `t' months of ULT initiation"
 	lab def urate_within_`t'm_ult 0 "No" 1 "Yes", modify
 	lab val urate_within_`t'm_ult urate_within_`t'm_ult
@@ -1357,7 +1368,7 @@ foreach target in 300 360 {
 
 ***Variables dependent on follow-up time
 foreach t in 12 {
-    local summaryvars `summaryvars' urate_`t'm urate_count_`t'm two_urate_`t'm lowest_urate_`t'm repeat_after360_`t'm_ult repeat_below360_`t'm_ult urate_within_`t'm_ult urate_count_`t'm_ult two_urate_`t'm_ult lowest_urate_`t'm_ult urate_`t'm_ult urate_`t'm_ult_cat urate_`t'm_ult_recode
+    local summaryvars `summaryvars' urate_`t'm urate_count_`t'm two_urate_`t'm lowest_urate_`t'm repeat_after360_`t'm_ult repeat_below360_`t'm_ult has_`t'm_fup_target urate_within_`t'm_ult urate_count_`t'm_ult two_urate_`t'm_ult lowest_urate_`t'm_ult urate_`t'm_ult urate_`t'm_ult_cat urate_`t'm_ult_recode
 
     ***Variables dependent on both target and timepoint
     foreach target in 300 360 {
@@ -1415,34 +1426,37 @@ use "$projectdir/output/data/cohort_bloods.dta", clear
 
 **Store admission dates
 preserve
-keep patient_id gout_adm_date_*
+keep patient_id ${disease}_inc_date gout_adm_date_*
 reshape long gout_adm_date_, i(patient_id) j(admission_order)
 drop if missing(gout_adm_date_)
 rename gout_adm_date_ flare_overall_date
 format flare_overall_date %td
-keep patient_id flare_overall_date
+gen flare_source = 1
+keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/adm_dates_long.dta", replace
 restore
 
 **Store ED attendance dates
 preserve
-keep patient_id gout_ed_date_*
+keep patient_id ${disease}_inc_date gout_ed_date_*
 reshape long gout_ed_date_, i(patient_id) j(emerg_order)
 drop if missing(gout_ed_date_)
 rename gout_ed_date_ flare_overall_date
 format flare_overall_date %td
-keep patient_id flare_overall_date
+gen flare_source = 2
+keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/emerg_dates_long.dta", replace
 restore
 
 **Store gout flare-code dates
 preserve
-keep patient_id flare_date_*
+keep patient_id ${disease}_inc_date flare_date_*
 reshape long flare_date_, i(patient_id) j(flare_order)
 drop if missing(flare_date_)
 rename flare_date_ flare_overall_date
 format flare_overall_date %td
-keep patient_id flare_overall_date
+gen flare_source = 3
+keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/flare_dates_long.dta", replace
 restore
 
@@ -1451,29 +1465,27 @@ keep patient_id ${disease}_inc_date gout_cons_date_* colchicine_date_* nsaid_dat
 reshape long gout_cons_date_, i(patient_id) j(consult_order)
 drop if missing(gout_cons_date_)
 gen code_and_tx_date_ =.
+gen code_and_tx_drug =.
 format code_and_tx_date_ %td
 
 ***Find matching consult and treatment dates
 forvalues i = 1/$max_prescription {
-    replace code_and_tx_date_ = gout_cons_date_ if !missing(gout_cons_date_) & (gout_cons_date_ == colchicine_date_`i' | gout_cons_date_ == nsaid_date_`i' | gout_cons_date_ == steroid_date_`i')
-}
-replace code_and_tx_date_=. if (code_and_tx_date_ < (${disease}_inc_date+14)) & code_and_tx_date_!=. //remove events within 14 days after diagnosis 
+    replace code_and_tx_date_ = gout_cons_date_ if gout_cons_date_ == nsaid_date_`i' & !missing(gout_cons_date_, nsaid_date_`i') 
+    replace code_and_tx_drug = 1 if gout_cons_date_ == nsaid_date_`i' & !missing(gout_cons_date_, nsaid_date_`i') 
+	
+	replace code_and_tx_date_ = gout_cons_date_ if gout_cons_date_ == colchicine_date_`i' & !missing(gout_cons_date_, colchicine_date_`i') 
+    replace code_and_tx_drug = 2 if gout_cons_date_ == colchicine_date_`i' & !missing(gout_cons_date_, colchicine_date_`i') 
 
-***Remove events that occur within 14 days of one another (repeat this until no further events within 14 days of one another)
-sort patient_id code_and_tx_date_
-local changed 1
-while `changed' {
-    bys patient_id (code_and_tx_date_): gen n=_n
-    quietly count if n > 1 & !missing(code_and_tx_date_, code_and_tx_date_[_n-1]) & (code_and_tx_date_ - code_and_tx_date_[_n-1]) < 14
-    local changed = r(N)
-    replace code_and_tx_date_ = . if n > 1 & !missing(code_and_tx_date_, code_and_tx_date_[_n-1]) & (code_and_tx_date_ - code_and_tx_date_[_n-1]) < 14
-    drop n
+    replace code_and_tx_date_ = gout_cons_date_ if gout_cons_date_ == steroid_date_`i' & !missing(gout_cons_date_, steroid_date_`i') 
+    replace code_and_tx_drug = 3 if gout_cons_date_ == steroid_date_`i' & !missing(gout_cons_date_, steroid_date_`i') 
 }
 
 rename code_and_tx_date_ flare_overall_date
+rename code_and_tx_drug flare_drug
 format flare_overall_date %td
 drop if missing(flare_overall_date)
-keep patient_id flare_overall_date
+gen flare_source = 4
+keep patient_id ${disease}_inc_date flare_overall_date flare_drug flare_source
 save "$projectdir/output/data/code_and_tx_dates_long.dta", replace
 
 **Append admissions, ED attendances and flare codes
@@ -1481,29 +1493,39 @@ append using "$projectdir/output/data/emerg_dates_long.dta"
 append using "$projectdir/output/data/adm_dates_long.dta"
 append using "$projectdir/output/data/flare_dates_long.dta"
 
+**Remove events within first 14 days of diagnosis
+drop if flare_overall_date < (${disease}_inc_date + 14)
+
 **Remove events that occur within 14 days of one another (repeat this until no further events within 14 days of one another)
-sort patient_id flare_overall_date
+sort patient_id flare_overall_date flare_source
 local changed 1
 while `changed' {
-    bys patient_id (flare_overall_date): gen n=_n
-    quietly count if n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1]) < 14
+	by patient_id (flare_overall_date flare_source): gen too_close = _n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1] < 14)
+    by patient_id (flare_overall_date flare_source): gen drop_event = too_close & sum(too_close) == 1
+	*Transfer treatment from the event being dropped to the preceding retained flare episode
+    by patient_id (flare_overall_date flare_source): replace flare_drug = flare_drug[_n+1] if _n < _N & drop_event[_n+1] == 1 & !missing(flare_drug[_n+1]) & (missing(flare_drug) | flare_drug[_n+1] > flare_drug)
+    quietly count if drop_event
     local changed = r(N)
-    replace flare_overall_date = . if n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1]) < 14
-    drop n
+    drop if drop_event
+    drop too_close drop_event
 }
 
+**Define flare source
+label define flare_source ///
+    1 "Admission" ///
+	2 "ED attendance" ///
+	3 "Flare code" ///
+    4 "Consultation plus treatment", replace
+label val flare_source flare_source
+
 **Generate overall flare counts and first post-diagnosis flare date
-bys patient_id (flare_overall_date): gen n=_n if flare_overall_date!=.
-by patient_id: egen flare_overall_count=max(n) //count of flares/admissions/ED after diagnosis
+sort patient_id flare_overall_date
+by patient_id: gen flare_overall_count = _N
 lab var flare_overall_count "Number of gout flares after diagnosis"
-drop n
-bys patient_id (flare_overall_date): gen n=_n
-drop if n>1 & flare_overall_date==. //drop missing values after the first row
-gen first_flare_overall_date = flare_overall_date if n==1
+by patient_id (flare_overall_date): gen first_flare_overall_date = flare_overall_date[1]
 format first_flare_overall_date %td
 lab var first_flare_overall_date "Date of first flare after diagnosis"
-by patient_id: replace first_flare_overall_date= first_flare_overall_date[_n-1] if missing(first_flare_overall_date)
-rename n flare_overall_order
+by patient_id (flare_overall_date): gen flare_overall_order = _n
 rename flare_overall_date flare_overall_date_
 save "$projectdir/output/data/flares.dta", replace
 
@@ -1515,30 +1537,25 @@ merge 1:m patient_id using "$projectdir/output/data/flares.dta", keep(master mat
 replace flare_overall_count = 0 if missing(flare_overall_count)
 label variable flare_overall_count "Number of gout flares after diagnosis"
 
-**Flare dates that received colchicine vs. NSAIDs vs. steroids on same day
-gen flare_drug_ = 0 if flare_overall_date_!=.
-
-forval i = 1/$max_prescription {
-	replace flare_drug_ = 1 if flare_overall_date_!=. & flare_overall_date_ == colchicine_date_`i' & colchicine_date_`i'!=. 
-	replace flare_drug_ = 2 if flare_overall_date_!=. & flare_overall_date_ == nsaid_date_`i' & nsaid_date_`i'!=. 
-	replace flare_drug_ = 3 if flare_overall_date_!=. & flare_overall_date_ == steroid_date_`i' & steroid_date_`i'!=. 
-}
-
+**Flare dates that received colchicine vs. NSAIDs vs. steroids on same day - generated above
+rename flare_drug flare_drug_
+replace flare_drug_ = 0 if !missing(flare_overall_date_) & missing(flare_drug_)
 lab var flare_drug_ "Drug used for treatment of gout flare"
-lab define flare_drug_ 0 "No drug" 1 "Colchicine" 2 "NSAID" 3 "Corticosteroid"
+lab define flare_drug_ 0 "No captured drug" 1 "NSAID" 2 "Colchicine" 3 "Corticosteroid", modify
 lab val flare_drug_ flare_drug_
 
 **Save a long format dta for downstream flare analyses
 preserve
-keep patient_id flare_overall_date_ flare_drug_ $demographic
+keep patient_id flare_overall_date_ flare_drug_ $demographic flare_source
 save "$projectdir/output/data/flares_long.dta", replace
 restore
 
 **Revert to wide format
+rename flare_source flare_source_
 replace flare_overall_order = 1 if missing(flare_overall_order)
 isid patient_id flare_overall_order
 
-reshape wide flare_overall_date_ flare_drug_, i(patient_id) j(flare_overall_order)
+reshape wide flare_overall_date_ flare_drug_ flare_source_, i(patient_id) j(flare_overall_order)
 
 **Check whether at least 12 months of follow-up after first flare
 foreach t in 12 {
@@ -1546,7 +1563,8 @@ foreach t in 12 {
 	di `days'
 	
 	gen has_`t'm_fup_flare=1 if (reg_end_date!=. & (reg_end_date >= (first_flare_overall_date + `days')) & ((first_flare_overall_date + `days') <= (date("$studyfup_date", "YMD")))) | (reg_end_date==. & ((first_flare_overall_date + `days') <= (date("$studyfup_date", "YMD"))))
-	recode has_`t'm_fup_flare .=0 //includes those who didn't have flare
+	replace has_`t'm_fup_flare = 0 if missing(has_`t'm_fup_flare) & !missing(first_flare_overall_date)
+	replace has_`t'm_fup_flare = . if missing(first_flare_overall_date)
 	lab var has_`t'm_fup_flare "At least `t' months of follow-up after first flare"
 	lab def has_`t'm_fup_flare 0 "No" 1 "Yes"
 	lab val has_`t'm_fup_flare has_`t'm_fup_flare
@@ -1576,16 +1594,9 @@ foreach t in 12 {
 }
 
 **Treatment of first flare after diagnosis (i.e. received colchicine vs. NSAIDs vs. steroids on same day) //could add combination
-gen first_flare_drug = 0 if first_flare_overall_date!=.
-
-forval i = 1/$max_prescription {
-	replace first_flare_drug = 1 if first_flare_overall_date!=. & first_flare_overall_date == colchicine_date_`i' & colchicine_date_`i'!=. 
-	replace first_flare_drug = 2 if first_flare_overall_date!=. & first_flare_overall_date == nsaid_date_`i' & nsaid_date_`i'!=. 
-	replace first_flare_drug = 3 if first_flare_overall_date!=. & first_flare_overall_date == steroid_date_`i' & steroid_date_`i'!=. 
-}
-
-lab var first_flare_drug "Drug used for treatment of gout flare"
-lab define first_flare_drug 0 "No drug" 1 "Colchicine" 2 "NSAID" 3 "Corticosteroid", modify
+gen first_flare_drug = flare_drug_1
+lab var first_flare_drug "Drug used for treatment of first gout flare"
+lab define first_flare_drug 0 "No captured drug" 1 "NSAID" 2 "Colchicine" 3 "Corticosteroid", modify
 lab val first_flare_drug first_flare_drug
 
 **Whether urate test was performed within 3 months of first non-index flare
@@ -1644,7 +1655,8 @@ foreach t in 12 {
 	di `days'
 	
 	gen has_`t'm_fup_risk=1 if (reg_end_date!=. & (reg_end_date >= (ult_risk_date_dx + `days')) & ((ult_risk_date_dx + `days') <= (date("$studyfup_date", "YMD")))) | (reg_end_date==. & ((ult_risk_date_dx + `days') <= (date("$studyfup_date", "YMD"))))
-	recode has_`t'm_fup_risk .=0 //includes those who were not at risk
+	replace has_`t'm_fup_risk = 0 if missing(has_`t'm_fup_risk) & !missing(ult_risk_date_dx)
+	replace has_`t'm_fup_risk = . if missing(ult_risk_date_dx)
 	lab var has_`t'm_fup_risk "At least `t' months of follow-up after becoming at risk for ULT"
 	lab def has_`t'm_fup_risk 0 "No" 1 "Yes"
 	lab val has_`t'm_fup_risk has_`t'm_fup_risk

@@ -88,7 +88,14 @@ set scheme plotplainblind
 **Individuals who should have been offered ULT at diagnosis or subsequently on the basis of risk factors
 **Individuals prescribed febuxostat (with/without MACE)
 
-foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
+foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiation postdiagnosis baseline {
+	
+	**Check table exists first
+	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	if _rc {
+		di as text "data_table_`table'.csv not found; skipping."
+		continue
+	}
 
 	**Import rounded and redacted data tables
 	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
@@ -133,6 +140,31 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 		gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
 
 		**Set y-axis format and title
+		quietly summarize prop, meanonly
+		local pmin = r(min)
+		local pmax = r(max)
+
+		if (`pmax' <= 10) {
+			local ymin 0
+			local ystep 1
+			local ymax 10
+		}
+		else if (`pmax' <= 50) {
+			local ymin 0
+			local ystep 10
+			local ymax 50
+		}
+		else if (`pmin' >= 50) {
+			local ymin 50
+			local ystep 10
+			local ymax 100
+		}
+		else {
+			local ymin 0
+			local ystep 10
+			local ymax 100
+		}
+		
 		local format "format(%9.0f)"
 		local ytitle "Percentage of patients"
 
@@ -149,7 +181,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 		local outcome_desc = outcome_desc
 
 		***Temporal plot over study period (scatter with moving average)
-		twoway scatter prop month_year, ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line prop_ma month_year, lcolor(emerald) lstyle(solid) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
+		twoway scatter prop month_year, ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line prop_ma month_year, lcolor(emerald) lstyle(solid) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
 		graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.$img", replace
 
 		**ITSA graphs
@@ -253,17 +285,12 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			predict yhat if e(sample)
 
 			****Plot observed and fitted lines
-			twoway scatter prop month_year if e(sample), ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line yhat month_year if e(sample) & month_year<$intervention, lcolor(emerald) lstyle(solid) || line yhat month_year if e(sample) & month_year>=$intervention, lcolor(emerald) lstyle(solid) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) ///
+			twoway scatter prop month_year if e(sample), ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line yhat month_year if e(sample) & month_year<$intervention, lcolor(emerald) lstyle(solid) || line yhat month_year if e(sample) & month_year>=$intervention, lcolor(emerald) lstyle(solid) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(off) xsize(16) ysize(9) ///
 			graphregion(margin(r=20)) plotregion(margin(r=15)) ///
 			text(`ybox' `xbox' `boxlines', place(e) just(left) box bcolor(white) margin(small) size(small)) ///
 			name("`outcome'", replace)
 			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
 			
-		/*  itsa prop if inrange(month_year, `start', `end'), single trperiod($intervention_tm) lag(5) replace posttrend  ///
-			figure(xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(1)) xlabel(`xlabel', nogrid labsize(small) axis(1)) xlabel($intervention "NICE Guideline", axis(2) labsize(small) labcolor(navy)) xtitle("", axis(2)) xscale(noline axis(2)) title("", size(small)) lstyle(dashed) subtitle("", size(medsmall)) ytitle("`ytitle'", size(medsmall) margin(small)) yscale(range(0 .)) ylabel(0, add nogrid `format' labsize(small)) note("", size(v.small)) legend(off) name("itsa_`outcome'", replace) ///
-			) 
-			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa.$img", replace
-		*/
 			actest, lag(18)		
 		}
 		restore
@@ -273,7 +300,14 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 *Multi-line figures by demographic characteristics ==================================*/
 
 **Loop through data tables
-foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
+foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiation postdiagnosis baseline {
+	
+	**Check table exists first
+	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	if _rc {
+		di as text "data_table_`table'.csv not found; skipping."
+		continue
+	}
 	
 	***Import rounded and redacted data tables
 	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
@@ -324,6 +358,15 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			***Skip if no observations
 			count
 			if r(N)==0 continue
+			
+			***Optional: drop demographic levels with >50% missing proportions
+			bysort demog_level: egen prop_missing = mean(missing(prop))
+			drop if prop_missing > 0.5
+			drop prop_missing
+
+			***Skip if no demographic levels remain
+			count
+			if r(N) == 0 continue
 	
 			***Convert date format
 			rename month_year month_year_s
@@ -335,7 +378,32 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			***Generate 3-monthly moving averages for proportions
 			bys demog_level (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
 
-			***Set y-axis format and title			
+			**Set y-axis format and title
+			quietly summarize prop, meanonly
+			local pmin = r(min)
+			local pmax = r(max)
+
+			if (`pmax' <= 10) {
+				local ymin 0
+				local ystep 1
+				local ymax 10
+			}
+			else if (`pmax' <= 50) {
+				local ymin 0
+				local ystep 10
+				local ymax 50
+			}
+			else if (`pmin' >= 50) {
+				local ymin 50
+				local ystep 10
+				local ymax 100
+			}
+			else {
+				local ymin 0
+				local ystep 10
+				local ymax 100
+			}
+			
 			local format "format(%9.0f)"
 			local ytitle "Percentage of patients"
 
@@ -353,7 +421,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			
 			***Choose colour palette based on demographic variable (change as needed)
 			if "`demog_var'" == "sex" {
-				local colours "red midblue"
+				local colours "orange midblue"
 				local legtitle ""
 			}
 			else if "`demog_var'" == "agegroup" {
@@ -435,7 +503,7 @@ foreach table in flare_blood febux_mace ultrisk postult postdiagnosis baseline {
 			local gname = substr("`gname'", 1, 32)
 
 			***Build plots
-			twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(0 .)) ylabel(0, add `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
+			twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
 			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.$img", replace
 		}	
 	}	
@@ -488,6 +556,31 @@ foreach table in postdiagnosis {
 		bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
 
 		**Set y-axis format and title
+		quietly summarize prop, meanonly
+		local pmin = r(min)
+		local pmax = r(max)
+
+		if (`pmax' <= 10) {
+			local ymin 0
+			local ystep 1
+			local ymax 10
+		}
+		else if (`pmax' <= 50) {
+			local ymin 0
+			local ystep 10
+			local ymax 50
+		}
+		else if (`pmin' >= 50) {
+			local ymin 50
+			local ystep 10
+			local ymax 100
+		}
+		else {
+			local ymin 0
+			local ystep 10
+			local ymax 100
+		}
+		
 		local format "format(%9.0f)"
 		local ytitle "Percentage of patients"
 					
@@ -535,7 +628,7 @@ foreach table in postdiagnosis {
 		}
 
 		***Build plots
-		twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
+		twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
 		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.$img", replace
 	}
 }
@@ -585,6 +678,31 @@ foreach table in postult {
 		bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
 
 		**Set y-axis format and title
+		quietly summarize prop, meanonly
+		local pmin = r(min)
+		local pmax = r(max)
+
+		if (`pmax' <= 10) {
+			local ymin 0
+			local ystep 1
+			local ymax 10
+		}
+		else if (`pmax' <= 50) {
+			local ymin 0
+			local ystep 10
+			local ymax 50
+		}
+		else if (`pmin' >= 50) {
+			local ymin 50
+			local ystep 10
+			local ymax 100
+		}
+		else {
+			local ymin 0
+			local ystep 10
+			local ymax 100
+		}
+		
 		local format "format(%9.0f)"
 		local ytitle "Percentage of patients"
 					
@@ -639,14 +757,14 @@ foreach table in postult {
 		}
 
 		***Build plots
-		twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels' title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
+		twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels' title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name("`table'_`group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`group'.gph", replace)
 		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.$img", replace
 	}
 }
 
 *Multi-line figures for categorical variables (full cohort) ==================================
 
-foreach table in ult_drug flare_drug {
+foreach table in ult_drug flare_drug flares {
 	
 	***Import rounded and redacted data tables
 	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
@@ -676,7 +794,7 @@ foreach table in ult_drug flare_drug {
 	***Generate 3-monthly moving averages for proportions
 	bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
 
-	***Set y-axis format and title
+	**Set y-axis format and title
 	local format "format(%9.0f)"
 	local ytitle "Percentage of patients"
 
@@ -724,7 +842,7 @@ foreach table in ult_drug flare_drug {
 		}
 
 	***Build plots
-    twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(20)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'", replace) saving("$projectdir/output/figures/temporal_plot_`table'.gph", replace)
+    twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(10)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'", replace) saving("$projectdir/output/figures/temporal_plot_`table'.gph", replace)
 	graph export "$projectdir/output/figures/temporal_plot_`table'.$img", replace
 }
 
