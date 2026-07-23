@@ -75,15 +75,15 @@ program define rounded_categorical
 		local outcome_desc : variable label `outcome' 
 		gen variable = `"`outcome_desc'"'
 		decode `outcome', gen(categories)
+		replace categories = "Missing" if categories == ""
 		gen count = round(_freq, 5)
 		egen total = total(count)
 		gen percent = round((count/total)*100, 0.01)
 		order total, before(percent)
-		egen mincount = min(count)
-		replace percent = . if mincount<=7
-		replace total = . if mincount<=7
-		replace count = . if mincount<=7
-		drop mincount
+		*egen mincount = min(count)
+		replace percent =. if count<=7
+		replace total =. if count<=7
+		replace count =. if count<=7
 		format percent %14.4f
 		format count total %14.0f
 		list variable categories count total percent
@@ -258,8 +258,8 @@ foreach t in 12 {
 	**Set inclusion criteria - limited to those who had at least t months duration of follow-up post-ULT (no restriction on ULT within 12m)
 	keep if has_`t'm_fup_ult==1
 
-	**Process catergorical outcomes of interest //different ULT prophylaxis to graphs
-	foreach outcome of varlist urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult {
+	**Process catergorical outcomes of interest //removed ULT prophylaxis for now
+	foreach outcome of varlist urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult has_`t'm_fup_target {
 		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
 	}
 
@@ -313,213 +313,4 @@ foreach t in 12 {
 	}
 }
 
-/*Generate unrounded tables for checking (not outputted) ==============================*
-
-**Baseline table
-
-***Load processed dataset
-use "$projectdir/output/data/cohort_processed.dta", clear
-
-***Store list of additional variables of interest (passed from yaml)
-local comorbidity_vars_bl
-foreach comorbidity in $comorbidities {
-    if "`comorbidity_vars_bl'" == "" {
-        local comorbidity_vars_bl "`comorbidity'_bl cat %5.1f"
-    }
-    else {
-        local comorbidity_vars_bl "`comorbidity_vars_bl' \ `comorbidity'_bl cat %5.1f"
-    }
-}
-di "`comorbidity_vars_bl'"
-
-local disease_feature_vars_bl
-foreach feature in $disease_features {
-    if "`disease_feature_vars_bl'" == "" {
-        local disease_feature_vars_bl "`feature'_bl cat %5.1f"
-    }
-    else {
-        local disease_feature_vars_bl "`disease_feature_vars_bl' \ `feature'_bl cat %5.1f"
-    }
-}
-di "`disease_feature_vars_bl'"
-
-local blood_vars_bl
-foreach blood in $bloods {
-    if "`blood_vars_bl'" == "" {
-        local blood_vars_bl "had_`blood'_bl cat %5.1f \ `blood'_bl_value contn %5.1f"
-    }
-    else {
-        local blood_vars_bl "`blood_vars_bl' \ had_`blood'_bl cat %5.1f \ `blood'_bl_value contn %5.1f"
-    }
-}
-di "`blood_vars_bl'"
-
-preserve
-table1_mc, total(before) onecol nospacelowpercent missing iqrmiddle(",")  ///
-	vars(age contn %5.1f \ ///
-		 agegroup cat %5.1f \ ///
-		 sex cat %5.1f \ ///
-		 ethnicity cat %5.1f \ ///
-		 imd cat %5.1f \ ///
-		 region cat %5.1f \ ///
-		 smoke cat %5.1f \ ///
-		 bmicat cat %5.1f \ ///
-         `comorbidity_vars_bl' \ ///
-		 `blood_vars_bl' \ ///
-		 egfr_bl_cat cat %5.1f \ ///
-		 ckd_comb_bl cat %5.1f \ ///
-		 ckd_transplant_bl cat %5.1f \ ///
-		 hba1c_bl_cat cat %5.1f \ ///
-		 diab_bl_cat cat %5.1f \ ///
-		 urate_bl_cat cat %5.1f \ ///
-		 urate_bl_360_repeat cat %5.1f \ ///
-		 `disease_feature_vars_bl' \ ///
-		 diuretic_bl cat %5.1f \ ///
-		 sglt2_bl cat %5.1f \ ///
-		 ace_arb_bl cat %5.1f \ ///
-		 ult_risk_bl cat %5.1f \ ///
-		 ${outpatients}_ref_before cat %5.1f \ ///
-		 ${outpatients}_opa_before cat %5.1f \ ///
-		 has_6m_fup cat %5.1f \ ///
-		 has_12m_fup cat %5.1f \ ///
-		 )
-restore
-
-/*
-preserve
-table1_mc, total(before) by(diagnosis_year) onecol nospacelowpercent missing iqrmiddle(",")  ///
-	vars(age contn %5.1f \ ///
-		 agegroup cat %5.1f \ ///	 
-		 sex cat %5.1f \ ///
-		 ethnicity cat %5.1f \ ///
-		 imd cat %5.1f \ ///
-		 region cat %5.1f \ ///
-		 smoke cat %5.1f \ ///
-		 bmicat cat %5.1f \ ///
-         `comorbidity_vars_bl' \ ///
-		 `blood_vars_bl' \ ///
-		 egfr_bl_cat cat %5.1f \ ///
-		 ckd_comb_bl cat %5.1f \ ///
-		 ckd_transplant_bl cat %5.1f \ ///
-		 hba1c_bl_cat cat %5.1f \ ///
-		 diab_bl_cat cat %5.1f \ ///
-		 urate_bl_cat cat %5.1f \ ///
-		 urate_bl_360_repeat cat %5.1f \ ///
-		 `disease_feature_vars_bl' \ ///
-		 diuretic_bl cat %5.1f \ ///
-		 ult_risk_bl cat %5.1f \ ///
-		 ${outpatients}_ref_before cat %5.1f \ ///
-		 ${outpatients}_opa_before cat %5.1f \ ///
-		 has_6m_fup cat %5.1f \ ///
-		 has_12m_fup cat %5.1f \ ///
-		 )
-restore
-*/
-
-**Disease-specific events occurring within 6/12m of diagnosis
-
-***Loop through time periods of interest
-foreach t in 12 {
-	
-	***Load processed dataset
-	use "$projectdir/output/data/cohort_processed.dta", clear
-
-	***Set inclusion criteria - limited to those who had at least t months duration of follow-up post-diagnosis
-	keep if has_`t'm_fup==1
-	
-	***Store list of additional variables of interest (passed from yaml)
-	local blood_vars_`t'm
-	foreach blood in $bloods {
-		if "`blood_vars_`t'm'" == "" {
-			local blood_vars_`t'm "`blood'_within_`t'm cat %5.1f"
-		}
-		else {
-			local blood_vars_`t'm  "`blood_vars_`t'm' \ `blood'_within_`t'm cat %5.1f"
-		}
-	}
-	di "`blood_vars_`t'm'"
-	
-	preserve
-	table1_mc, total(before) onecol nospacelowpercent missing iqrmiddle(",")  ///
-		vars(urate_`t'm cat %5.1f \ ///
-			 two_urate_`t'm cat %5.1f \ ///
-			 urate_count_`t'm contn %5.1f \ ///
-			 urate_360_`t'm_cat cat %5.1f \ ///
-			 urate_300_`t'm_cat cat %5.1f \ ///
-			 lowest_urate_`t'm contn %5.1f \ ///
-			 ult_`t'm cat %5.1f \ ///
-			 ult_cat_`t'm cat %5.1f \ ///
-			 has_`t'm_fup_ult cat %5.1f \ ///
-			 ult_first_drug_`t'm cat %5.1f \ ///
-			 allopurinol_`t'm cat %5.1f \ ///
-			 febuxostat_`t'm cat %5.1f \ ///
-			 ${outpatients}_refopa_`t'm cat %5.1f \ ///
-			 `blood_vars_`t'm' cat %5.1f \ ///
-			 )
-	restore	
-/*	
-	preserve
-	keep if has_`t'm_fup==1
-	table1_mc, total(before) by(diagnosis_year) onecol nospacelowpercent missing iqrmiddle(",")  ///
-		vars(urate_`t'm cat %5.1f \ ///
-			 two_urate_`t'm cat %5.1f \ ///
-			 urate_count_`t'm contn %5.1f \ ///
-			 urate_360_`t'm_cat cat %5.1f \ ///
-			 urate_300_`t'm_cat cat %5.1f \ ///
-			 lowest_urate_`t'm contn %5.1f \ ///
-			 ult_`t'm cat %5.1f \ ///
-			 ult_cat_`t'm cat %5.1f \ ///
-			 has_`t'm_fup_ult cat %5.1f \ ///
-			 ult_first_drug_`t'm cat %5.1f \ ///
-			 allopurinol_`t'm cat %5.1f \ ///
-			 febuxostat_`t'm cat %5.1f \ ///
-			 ${outpatients}_refopa_`t'm cat %5.1f \ ///
-			 `blood_vars_`t'm' cat %5.1f \ ///
-			 )
-	restore	
-*/
-}
-	
-**Disease-specific events occurring within 6/12m of ULT initiation
-
-***Loop through time periods of interest
-foreach t in 12 {
-	
-	***Load processed dataset
-	use "$projectdir/output/data/cohort_processed.dta", clear
-
-	***Set inclusion criteria - limited to those who initiated ULT and who had at least t months duration of follow-up post-diagnosis
-	keep if ult_`t'm & has_`t'm_fup_ult==1
-	
-	preserve
-	table1_mc, total(before) onecol nospacelowpercent missing iqrmiddle(",")  ///
-		vars(urate_within_`t'm_ult cat %5.1f \ ///
-			 two_urate_`t'm_ult cat %5.1f \ ///
-			 urate_count_`t'm_ult contn %5.1f \ ///
-			 urate_`t'm_ult_cat cat %5.1f \ ///
-			 lowest_urate_`t'm_ult contn %5.1f \ ///
-			 ult_scripts_`t'm contn %5.1f \ ///
-			 ult_prophylaxis_`t'm cat %5.1f \ ///
-			 repeat_after360_`t'm_ult cat %5.1f \ ///
-			 repeat_below360_`t'm_ult cat %5.1f \ ///
-			 )
-	restore	
-/*	
-	preserve
-	keep if ult_`t'm & has_`t'm_fup_ult==1
-	table1_mc, total(before) by(diagnosis_year) onecol nospacelowpercent missing iqrmiddle(",")  ///
-		vars(urate_within_`t'm_ult cat %5.1f \ ///
-			 two_urate_`t'm_ult cat %5.1f \ ///
-			 urate_count_`t'm_ult contn %5.1f \ ///
-			 urate_`t'm_ult_cat cat %5.1f \ ///
-			 lowest_urate_`t'm_ult contn %5.1f \ ///
-			 ult_scripts_`t'm contn %5.1f \ ///
-			 ult_prophylaxis cat %5.1f \ ///
-			 repeat_after360_ult cat %5.1f \ ///
-			 repeat_below360_ult cat %5.1f \ /// 
-			 )
-	restore	
-*/
-}
-*/
 log close

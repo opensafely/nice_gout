@@ -193,7 +193,6 @@ foreach disease of local disease_list {
 
 			quietly summ rate_min_`stem', meanonly
 			local rmin = r(min)
-
 			quietly summ rate_max_`stem', meanonly
 			local rmax = r(max)
 
@@ -201,36 +200,38 @@ foreach disease of local disease_list {
 				di as error "Rates not estimable for `stem'; using default y-axis"
 				local lower_`stem' = 0
 				local upper_`stem' = 1
-				local format_`stem' = "format(%9.1f)"
 			}
 			else if `rmax' == 0 {
 				local lower_`stem' = 0
 				local upper_`stem' = 1
-				local format_`stem' = "format(%9.1f)"
 			}
-			else if `rmin' < 1 {
+			else if `rmax' < 1 {
 				local lower_`stem' = round(0.80 * `rmin', 0.01)
 				local upper_`stem' = round(1.10 * `rmax', 0.01)
-				local format_`stem' = "format(%03.1f)"
 			}
-			else if `rmin' < 10 {
+			else if `rmax' < 10 {
 				local lower_`stem' = round(0.80 * `rmin', 0.1)
 				local upper_`stem' = round(1.10 * `rmax', 0.1)
-				local format_`stem' = "format(%9.1f)"
 			}
-			else if `rmin' < 100 {
+			else if `rmax' < 100 {
 				local lower_`stem' = round(0.80 * `rmin', 1)
 				local upper_`stem' = round(1.10 * `rmax', 1)
-				local format_`stem' = "format(%9.0f)"
 			}
 			else {
 				local lower_`stem' = round(0.80 * `rmin', 10)
 				local upper_`stem' = round(1.10 * `rmax', 10)
-				local format_`stem' = "format(%9.0f)"
 			}
 
 			if `lower_`stem'' < 0.2 local lower_`stem' = 0
 			if `upper_`stem'' <= `lower_`stem'' local upper_`stem' = `lower_`stem'' + 1
+
+			if `upper_`stem'' < 2 {
+				local format_`stem' = "format(%9.1f)"
+			}
+			else {
+				local format_`stem' = "format(%9.0f)"
+			}
+
 			di `lower_`stem''
 			di `upper_`stem''
 
@@ -322,7 +323,6 @@ foreach disease of local disease_list {
 
 			quietly summ rate_min_`stem', meanonly
 			local rmin = r(min)
-
 			quietly summ rate_max_`stem', meanonly
 			local rmax = r(max)
 
@@ -330,36 +330,38 @@ foreach disease of local disease_list {
 				di as error "Rates not estimable for `stem'; using default y-axis"
 				local lower_`stem' = 0
 				local upper_`stem' = 1
-				local format_`stem' = "format(%9.1f)"
 			}
 			else if `rmax' == 0 {
 				local lower_`stem' = 0
 				local upper_`stem' = 1
-				local format_`stem' = "format(%9.1f)"
 			}
-			else if `rmin' < 1 {
+			else if `rmax' < 1 {
 				local lower_`stem' = round(0.80 * `rmin', 0.01)
 				local upper_`stem' = round(1.10 * `rmax', 0.01)
-				local format_`stem' = "format(%03.1f)"
 			}
-			else if `rmin' < 10 {
+			else if `rmax' < 10 {
 				local lower_`stem' = round(0.80 * `rmin', 0.1)
 				local upper_`stem' = round(1.10 * `rmax', 0.1)
-				local format_`stem' = "format(%9.1f)"
 			}
-			else if `rmin' < 100 {
+			else if `rmax' < 100 {
 				local lower_`stem' = round(0.80 * `rmin', 1)
 				local upper_`stem' = round(1.10 * `rmax', 1)
-				local format_`stem' = "format(%9.0f)"
 			}
 			else {
 				local lower_`stem' = round(0.80 * `rmin', 10)
 				local upper_`stem' = round(1.10 * `rmax', 10)
-				local format_`stem' = "format(%9.0f)"
 			}
 
 			if `lower_`stem'' < 0.2 local lower_`stem' = 0
 			if `upper_`stem'' <= `lower_`stem'' local upper_`stem' = `lower_`stem'' + 1
+
+			if `upper_`stem'' < 2 {
+				local format_`stem' = "format(%9.1f)"
+			}
+			else {
+				local format_`stem' = "format(%9.0f)"
+			}
+
 			di `lower_`stem''
 			di `upper_`stem''
 
@@ -394,22 +396,22 @@ foreach disease of local disease_list {
 			graph export "$projectdir/output/figures/prev_`disease'_sex.svg", replace
 
 		*Unadjusted prevalence by 20-year age groups
-		twoway connected rate_18_39_ma year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_40_59_ma year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_60_79_ma year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_80_ma year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_age', `format_age' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Age group", size(small) margin(b=1)) order(1 "18 to 39" 2 "40 to 59" 3 "60 to 79" 4 "80 or above")) xsize(16) ysize(9) name(prev_`disease'_agegroup, replace) saving("$projectdir/output/figures/prev_`disease'_agegroup.gph", replace)
+		twoway connected rate_18_39 year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_40_59 year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_60_79 year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_80 year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_age', `format_age' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Age group", size(small) margin(b=1)) order(1 "18 to 39" 2 "40 to 59" 3 "60 to 79" 4 "80 or above")) xsize(16) ysize(9) name(prev_`disease'_agegroup, replace) saving("$projectdir/output/figures/prev_`disease'_agegroup.gph", replace)
 			*graph export "$projectdir/output/figures/prev_`disease'_agegroup.png", replace
 			graph export "$projectdir/output/figures/prev_`disease'_agegroup.svg", replace		
 			
 		*Unadjusted prevalence by IMD
-		twoway connected rate_imd1_ma year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_imd2_ma year, color(eltblue%30) msymbol(circle) lcolor(eltblue) lstyle(solid) || connected rate_imd3_ma year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_imd4_ma year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_imd5_ma year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_imd', `format_imd' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("IMD quintile", size(small) margin(b=1)) order(1 "1 Most deprived" 2 "2" 3 "3" 4 "4" 5 "5 Least deprived")) xsize(16) ysize(9) name(prev_`disease'_imd, replace) saving("$projectdir/output/figures/prev_`disease'_imd.gph", replace)
+		twoway connected rate_imd1 year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_imd2 year, color(eltblue%30) msymbol(circle) lcolor(eltblue) lstyle(solid) || connected rate_imd3 year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_imd4 year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_imd5 year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_imd', `format_imd' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("IMD quintile", size(small) margin(b=1)) order(1 "1 Most deprived" 2 "2" 3 "3" 4 "4" 5 "5 Least deprived")) xsize(16) ysize(9) name(prev_`disease'_imd, replace) saving("$projectdir/output/figures/prev_`disease'_imd.gph", replace)
 			*graph export "$projectdir/output/figures/prev_`disease'_imd.png", replace
 			graph export "$projectdir/output/figures/prev_`disease'_imd.svg", replace
 			
 		*Unadjusted prevalence by ethnicity
-		twoway connected rate_white_ma year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_mixed_ma year, color(eltblue%30) msymbol(circle) lcolor(eltblue) lstyle(solid) || connected rate_black_ma year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_asian_ma year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_other_ma year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_ethn', `format_ethn' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Ethnicity", size(small) margin(b=1)) order(1 "White" 2 "Mixed" 3 "Black" 4 "Asian" 5 "Chinese or other")) xsize(16) ysize(9) name(prev_`disease'_ethnicity, replace) saving("$projectdir/output/figures/prev_`disease'_ethnicity.gph", replace)
+		twoway connected rate_white year, color(ltblue%30) msymbol(circle) lcolor(ltblue) lstyle(solid) || connected rate_mixed year, color(eltblue%30) msymbol(circle) lcolor(eltblue) lstyle(solid) || connected rate_black year, color(ebblue%30) msymbol(circle) lcolor(ebblue) lstyle(solid) || connected rate_asian year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_other year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_ethn', `format_ethn' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Ethnicity", size(small) margin(b=1)) order(1 "White" 2 "Mixed" 3 "Black" 4 "Asian" 5 "Chinese or other")) xsize(16) ysize(9) name(prev_`disease'_ethnicity, replace) saving("$projectdir/output/figures/prev_`disease'_ethnicity.gph", replace)
 			*graph export "$projectdir/output/figures/prev_`disease'_ethnicity.png", replace
 			graph export "$projectdir/output/figures/prev_`disease'_ethnicity.svg", replace
 			
 		*Unadjusted prevalence by region
-		twoway connected rate_east_ma year, color(emerald%30) msymbol(circle) lcolor(emerald) lstyle(solid) || connected rate_eastmid_ma year, color(orange%30) msymbol(circle) lcolor(orange) lstyle(solid) || connected rate_london_ma year, color(red%30) msymbol(circle) lcolor(red) lstyle(solid) || connected rate_northeast_ma year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_northwest_ma year, color(dkgreen%30) msymbol(circle) lcolor(dkgreen) lstyle(solid) || connected rate_southeast_ma year, color(cranberry%30) msymbol(circle) lcolor(cranberry) lstyle(solid) || connected rate_southwest_ma year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) || connected rate_westmid_ma year, color(maroon%30) msymbol(circle) lcolor(maroon) lstyle(solid) || connected rate_yorkshire_ma year, color(teal%30) msymbol(circle) lcolor(teal) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_region', `format_region' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Region", size(small) margin(b=1)) order(1 "East" 2 "East Midlands" 3 "London" 4 "North East" 5 "North West" 6 "South East" 7 "South West" 8 "West Midlands" 9 "Yorkshire Humber")) xsize(16) ysize(9) name(prev_`disease'_region, replace) saving("$projectdir/output/figures/prev_`disease'_region.gph", replace)
+		twoway connected rate_east year, color(emerald%30) msymbol(circle) lcolor(emerald) lstyle(solid) || connected rate_eastmid year, color(orange%30) msymbol(circle) lcolor(orange) lstyle(solid) || connected rate_london year, color(red%30) msymbol(circle) lcolor(red) lstyle(solid) || connected rate_northeast year, color(blue%30) msymbol(circle) lcolor(blue) lstyle(solid) || connected rate_northwest year, color(dkgreen%30) msymbol(circle) lcolor(dkgreen) lstyle(solid) || connected rate_southeast year, color(cranberry%30) msymbol(circle) lcolor(cranberry) lstyle(solid) || connected rate_southwest year, color(navy%30) msymbol(circle) lcolor(navy) lstyle(solid) || connected rate_westmid year, color(maroon%30) msymbol(circle) lcolor(maroon) lstyle(solid) || connected rate_yorkshire year, color(teal%30) msymbol(circle) lcolor(teal) lstyle(solid) ytitle("`ytitleprev'", size(medsmall)) ylabel(`ylab_region', `format_region' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) title("Region", size(small) margin(b=1)) order(1 "East" 2 "East Midlands" 3 "London" 4 "North East" 5 "North West" 6 "South East" 7 "South West" 8 "West Midlands" 9 "Yorkshire Humber")) xsize(16) ysize(9) name(prev_`disease'_region, replace) saving("$projectdir/output/figures/prev_`disease'_region.gph", replace)
 			*graph export "$projectdir/output/figures/prev_`disease'_region.png", replace
 			graph export "$projectdir/output/figures/prev_`disease'_region.svg", replace
 
