@@ -110,10 +110,26 @@ for (j in 1:length(disease_list)) {
     series_values <- as.numeric(df_obs[[var]])
     
     if (length(series_values) == 0 || any(!is.finite(series_values))) {
+      
       message(
         "Skipping ", dis, " / ", var,
         ": no complete pre-intervention series."
       )
+      
+      png(
+        paste0("output/figures/obs_pred_", dis, "_", var, ".png"),
+        width = 1200,
+        height = 800,
+        res = 150
+      )
+      plot.new()
+      text(
+        0.5, 0.5,
+        "Insufficient data for SARIMA model",
+        cex = 1.3
+      )
+      dev.off()
+      
       next
     }
     
