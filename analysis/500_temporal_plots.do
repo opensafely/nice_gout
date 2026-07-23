@@ -13,7 +13,7 @@ USER-INSTALLED ADO:
 /*
 global projectdir "C:\Users\k1754142\OneDrive\PhD Project\OpenSAFELY NICE\nice_gout"
 global running_locally = 1 // Running on local machine
-global img png
+global img svg
 */
 
 global projectdir `c(pwd)'
@@ -78,17 +78,11 @@ set type double
 
 set scheme plotplainblind
 
-*Single line figures for full cohort ==================================*/
+*Single line figures for full cohort (month year variables) ==================================*/
 
 **Loop through data tables with different inclusion criteria
 
-**Baseline data (no additional inclusion criteria)
-**Individuals with X months minimum duration of follow-up post-diagnosis
-**Individuals with X months minimum duration of follow-up post-ULT initiation, assuming ULT initiation within X months of diagnosis
-**Individuals who should have been offered ULT at diagnosis or subsequently on the basis of risk factors
-**Individuals prescribed febuxostat (with/without MACE)
-
-foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiation postdiagnosis baseline {
+foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiagnosis baseline {
 	
 	**Check table exists first
 	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
@@ -149,12 +143,12 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 			local ystep 1
 			local ymax 10
 		}
-		else if (`pmax' <= 50) {
+		else if (`pmax' <= 30) {
 			local ymin 0
 			local ystep 10
 			local ymax 50
 		}
-		else if (`pmin' >= 50) {
+		else if (`pmin' >= 70) {
 			local ymin 50
 			local ystep 10
 			local ymax 100
@@ -175,7 +169,25 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 			local xlabel `xlabel' `m' "`y'" 
 		}
 		di as txt `"`xlabel'"'
-		local xtitle ""
+
+		if inlist("`table'", "baseline", "postdiagnosis") {
+			local xtitle "Date of diagnosis"
+		}
+		else if inlist("`table'", "atultinitiation", "postult", "ult_drug") {
+			local xtitle "Date of ULT initiation"
+		}
+		else if "`table'" == "posttarget" {
+			local xtitle "Date of urate target attainment"
+		}
+		else if "`table'" == "ultrisk" {
+			local xtitle "Date of risk factor onset for ULT initiation"
+		}
+		else if inlist("`table'", "flare_blood", "flare_drug", "flares") {
+			local xtitle "Date of flare"
+		}
+		else {
+			local xtitle ""
+		}
 		
 		***Set title
 		local outcome_desc = outcome_desc
@@ -297,10 +309,10 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 	}
 }
 
-*Multi-line figures by demographic characteristics ==================================*/
+*Multi-line figures by demographic characteristics (month year variables) ==================================*/
 
 **Loop through data tables
-foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiation postdiagnosis baseline {
+foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiagnosis baseline {
 	
 	**Check table exists first
 	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
@@ -359,9 +371,9 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 			count
 			if r(N)==0 continue
 			
-			***Optional: drop demographic levels with >50% missing proportions
+			***Optional: replace demographic levels as 0 with >50% missing proportions
 			bysort demog_level: egen prop_missing = mean(missing(prop))
-			drop if prop_missing > 0.5
+			replace prop = 0 if prop_missing > 0.5
 			drop prop_missing
 
 			***Skip if no demographic levels remain
@@ -388,12 +400,12 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 				local ystep 1
 				local ymax 10
 			}
-			else if (`pmax' <= 50) {
+			else if (`pmax' <= 30) {
 				local ymin 0
 				local ystep 10
 				local ymax 50
 			}
-			else if (`pmin' >= 50) {
+			else if (`pmin' >= 70) {
 				local ymin 50
 				local ystep 10
 				local ymax 100
@@ -414,7 +426,25 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 				local xlabel `xlabel' `m' "`y'"
 			}
 			di as txt `"`xlabel'"'
-			local xtitle ""
+			
+			if inlist("`table'", "baseline", "postdiagnosis") {
+				local xtitle "Date of diagnosis"
+			}
+			else if inlist("`table'", "atultinitiation", "postult", "ult_drug") {
+				local xtitle "Date of ULT initiation"
+			}
+			else if "`table'" == "posttarget" {
+				local xtitle "Date of urate target attainment"
+			}
+			else if "`table'" == "ultrisk" {
+				local xtitle "Date of risk factor onset for ULT initiation"
+			}
+			else if inlist("`table'", "flare_blood", "flare_drug", "flares") {
+				local xtitle "Date of flare"
+			}
+			else {
+				local xtitle ""
+			}
 			
 			***Set title
 			local outcome_desc = outcome_desc
@@ -509,6 +539,324 @@ foreach table in flare_blood febux_mace ultrisk posttarget postult atultinitiati
 	}	
 }
 
+*Single line figures for full cohort (yearly variables) ==================================*/
+
+**Loop through data tables with different inclusion criteria
+
+**Individuals prescribed febuxostat (with/without MACE)
+
+foreach table in febux_mace {
+	
+	**Check table exists first
+	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	if _rc {
+		di as text "data_table_`table'.csv not found; skipping."
+		continue
+	}
+
+	**Import rounded and redacted data tables
+	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	di "`table'"
+
+	**Extract outcomes of interest from data table
+	levelsof outcome_name, local(outcomes)
+	di `outcomes'
+
+	**Loop through outcomes of interest for full cohort
+	foreach outcome in `outcomes' {
+
+		preserve
+		
+		**Keep outcome of interest
+		keep if outcome_name == "`outcome'"
+		di "`outcome'"
+		
+		**Reshape to long format
+		reshape long count_ total_ prop_, i(month_year outcome_name outcome_desc) j(demographic) string
+		gen demog_group = substr(demographic, 1, 3)
+		gen demog_level = substr(demographic, 5, .)
+		replace demog_level = subinstr(demog_level, "_", " ", .)
+		rename count_ count
+		rename total_ total
+		rename prop_ prop
+		replace prop = prop*100 //change to %
+		drop demographic
+		
+		**Keep full cohort only
+		keep if demog_group == "all"
+		
+		**Format numeric year as a Stata annual date
+		format month_year %ty
+		order month_year, after(outcome_desc)
+				
+		**Set y-axis format and title
+		quietly summarize prop, meanonly
+		local pmin = r(min)
+		local pmax = r(max)
+
+		if (`pmax' <= 10) {
+			local ymin 0
+			local ystep 1
+			local ymax 10
+		}
+		else if (`pmax' <= 30) {
+			local ymin 0
+			local ystep 10
+			local ymax 50
+		}
+		else if (`pmin' >= 70) {
+			local ymin 50
+			local ystep 10
+			local ymax 100
+		}
+		else {
+			local ymin 0
+			local ystep 10
+			local ymax 100
+		}
+		
+		local format "format(%9.0f)"
+		local ytitle "Percentage of patients"
+
+		***Set x-axis format and title
+		local xlabel ""
+		forvalues y = $studystart_year(1)$studyend_year {
+			local xlabel `xlabel' `y' "`y'"
+		}
+		di as txt `"`xlabel'"'
+
+		if "`table'" == "febux_mace" {
+			local xtitle "Date of febuxostat initiation"
+		}
+		else {
+			local xtitle ""
+		}
+		
+		***Set title
+		local outcome_desc = outcome_desc
+		
+		sort month_year
+
+		***Temporal plot over study period (scatter with moving average)
+		twoway connected prop month_year, ytitle("`ytitle'", size(medsmall)) mcolor(emerald%30) msymbol(circle) lcolor(emerald) lstyle(solid) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(1)) xlabel(`xlabel', nogrid labsize(small) axis(1)) xlabel($intervention_year "NICE Guideline", axis(2) labsize(small) labcolor(navy) nogrid) xtitle("", axis(2)) xscale(noline axis(2)) title("", size(medium) margin(b=2)) xline($intervention_year) legend(off) xsize(16) ysize(9) name("`outcome'", replace) saving("$projectdir/output/figures/temporal_plot_`outcome'.gph", replace)
+		graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'.$img", replace
+
+		restore
+	}
+}
+
+*Multi-line figures by demographic characteristics (yearly variables) ==================================*/
+
+**Loop through data tables
+foreach table in febux_mace {
+	
+	**Check table exists first
+	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	if _rc {
+		di as text "data_table_`table'.csv not found; skipping."
+		continue
+	}
+	
+	***Import rounded and redacted data tables
+	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	di "`table'"
+	
+	tempfile table_base
+	save `table_base', replace
+		
+	**Extract outcomes of interest from data table
+	levelsof outcome_name, local(outcomes)
+	di `outcomes'
+
+	**Loop through outcomes of interest
+	foreach outcome in `outcomes' {
+		
+		use `table_base', clear
+	
+		keep if outcome_name == "`outcome'"
+		di "`outcome'"
+		
+		**Reshape to long format
+		reshape long count_ total_ prop_, i(month_year outcome_name outcome_desc) j(demographic) string
+		gen demog_group = substr(demographic, 1, 3)
+		gen demog_level = substr(demographic, 5, .)
+		replace demog_level = subinstr(demog_level, "_", " ", .)
+		replace demog_level = proper(demog_level)
+		rename count_ count
+		rename total_ total
+		rename prop_ prop
+		replace prop = prop*100 //change to %
+		drop demographic
+		
+		**Remove not known categories
+		drop if regexm(demog_level, "Not Known")
+		
+		**Save temporary file for that outcome
+		tempfile outcome_base
+		save `outcome_base', replace
+		
+		**Loop through demographic variables of interest
+		foreach demog_var in $demographic {
+			
+			use `outcome_base', clear
+			
+			di "`demog_var'"
+			keep if demog_group == substr("`demog_var'", 1, 3)
+			
+			***Skip if no observations
+			count
+			if r(N)==0 continue
+			
+			***Optional: replace demographic levels as 0 with >50% missing proportions
+			bysort demog_level: egen prop_missing = mean(missing(prop))
+			replace prop = 0 if prop_missing > 0.5
+			drop prop_missing
+
+			***Skip if no demographic levels remain
+			count
+			if r(N) == 0 continue
+	
+			**Format numeric year as a Stata annual date
+			format month_year %ty
+			order month_year, after(outcome_desc)
+				
+			**Set y-axis format and title
+			quietly summarize prop, meanonly
+			local pmin = r(min)
+			local pmax = r(max)
+
+			if (`pmax' <= 10) {
+				local ymin 0
+				local ystep 1
+				local ymax 10
+			}
+			else if (`pmax' <= 30) {
+				local ymin 0
+				local ystep 10
+				local ymax 50
+			}
+			else if (`pmin' >= 70) {
+				local ymin 50
+				local ystep 10
+				local ymax 100
+			}
+			else {
+				local ymin 0
+				local ystep 10
+				local ymax 100
+			}
+			
+			local format "format(%9.0f)"
+			local ytitle "Percentage of patients"
+			
+			***Set x-axis format and title
+			local xlabel ""
+			forvalues y = $studystart_year(1)$studyend_year {
+				local xlabel `xlabel' `y' "`y'"
+			}
+			di as txt `"`xlabel'"'
+			
+			if inlist("`table'", "baseline", "postdiagnosis") {
+				local xtitle "Date of diagnosis"
+			}
+			else if inlist("`table'", "atultinitiation", "postult", "ult_drug") {
+				local xtitle "Date of ULT initiation"
+			}
+			else if "`table'" == "posttarget" {
+				local xtitle "Date of urate target attainment"
+			}
+			else if "`table'" == "ultrisk" {
+				local xtitle "Date of risk factor onset for ULT initiation"
+			}
+			else if "`table'" == "febux_mace" {
+				local xtitle "Date of febuxostat initiation"
+			}
+			else if inlist("`table'", "flare_blood", "flare_drug", "flares") {
+				local xtitle "Date of flare"
+			}
+			else {
+				local xtitle ""
+			}
+			
+			***Set title
+			local outcome_desc = outcome_desc
+			
+			***Choose colour palette based on demographic variable (change as needed)
+			if "`demog_var'" == "sex" {
+				local colours "orange midblue"
+				local legtitle ""
+			}
+			else if "`demog_var'" == "agegroup" {
+				local colours "ltblue eltblue midblue ebblue blue navy black"
+				local legtitle "Age group"
+			}
+			else if inlist("`demog_var'", "imd") {
+				local colours "ltblue eltblue ebblue blue navy"
+				local legtitle "IMD quintile"
+			}
+			else if inlist("`demog_var'", "ethnicity") {
+				local colours "ltblue eltblue ebblue blue navy"
+				local legtitle "Ethnicity"
+			}
+			else if inlist("`demog_var'", "region") {
+				local colours "emerald orange red blue dkgreen cranberry navy maroon"
+				local legtitle "Region"
+			}
+			else {
+				local colours "emerald orange red blue dkgreen cranberry navy maroon teal sienna purple"
+				local legtitle ""
+			}
+
+			***Store plots and legend labels
+			local plots ""
+			local legorder ""
+			local leglabels ""
+			
+			***Extract variables of interest from data table
+			levelsof demog_level, local(demog_subset)
+			
+			local i = 0
+			foreach subset of local demog_subset {
+				di as txt `"`subset'"'
+				local ++i
+				local colour : word `i' of `colours'
+				if "`colour'"=="" local colour "black"
+			
+				****Single plot per subset: moving average line
+				local thisplot line prop month_year if demog_level==`"`subset'"', lcolor(`colour') lpattern(solid)
+				
+				if `i' == 1 local plots `thisplot'
+				else local plots `plots' || `thisplot'
+				di as txt `"`plots'"'
+
+				****Legend: keep only the moving average lines
+				local lineidx = `i'
+				local legorder `legorder' `lineidx'
+				local outcome_disp : subinstr local subset "_" " " , all
+				if demog_group == "reg" {
+					local outcome_disp = proper("`outcome_disp'")
+				}
+				else {
+				local outcome_disp = lower("`outcome_disp'")
+				local outcome_disp = upper(substr("`outcome_disp'",1,1)) + substr("`outcome_disp'",2,.)
+				}
+				local leglabels `leglabels' label(`lineidx' "`outcome_disp'")
+				di as txt `"`leglabels'"'
+			}
+			
+			***Shorten name if long variable
+			local gname = strtoname("`table'_`outcome'_`demog_var'")
+			local gname = substr("`gname'", 1, 32)
+			
+			sort demog_level month_year
+
+			***Build plots
+			twoway `plots' ytitle("`ytitle'", size(medsmall)) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention_year "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention_year) legend(region(fcolor(white%0)) title("`legtitle'", size(small) margin(b=1)) order(`legorder') `leglabels') xsize(16) ysize(9) name(`gname', replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.gph", replace)
+			graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_`demog_var'.$img", replace
+		}	
+	}	
+}
+
 *Multi-line figures for selected blood tests and comorbidities (grouped binary variables) (full cohort) =============*/
 
 **Outcome groups of interest (change if needed)
@@ -565,12 +913,12 @@ foreach table in postdiagnosis {
 			local ystep 1
 			local ymax 10
 		}
-		else if (`pmax' <= 50) {
+		else if (`pmax' <= 30) {
 			local ymin 0
 			local ystep 10
 			local ymax 50
 		}
-		else if (`pmin' >= 50) {
+		else if (`pmin' >= 70) {
 			local ymin 50
 			local ystep 10
 			local ymax 100
@@ -590,7 +938,13 @@ foreach table in postdiagnosis {
 			local m = ym(`y', 1)
 			local xlabel `xlabel' `m' "`y'"
 		}
-		local xtitle ""
+				
+		if inlist("`table'", "baseline", "postdiagnosis") {
+			local xtitle "Date of diagnosis"
+		}
+		else {
+			local xtitle ""
+		}
 		
 		***Extract variables of interest from data table
 		levelsof outcome_name, local(outcomes)
@@ -632,6 +986,8 @@ foreach table in postdiagnosis {
 		graph export "$projectdir/output/figures/temporal_plot_`table'_`group'.$img", replace
 	}
 }
+
+*Multi-line figures for ULT drug survival (grouped binary variables) =============*/
 
 **Outcome groups of interest (change if needed)
 local drugs `" "allopurinol_ongoing_12m", "febuxostat_ongoing_12m" "'
@@ -687,12 +1043,12 @@ foreach table in postult {
 			local ystep 1
 			local ymax 10
 		}
-		else if (`pmax' <= 50) {
+		else if (`pmax' <= 30) {
 			local ymin 0
 			local ystep 10
 			local ymax 50
 		}
-		else if (`pmin' >= 50) {
+		else if (`pmin' >= 70) {
 			local ymin 50
 			local ystep 10
 			local ymax 100
@@ -712,7 +1068,13 @@ foreach table in postult {
 			local m = ym(`y', 1)
 			local xlabel `xlabel' `m' "`y'"
 		}
-		local xtitle ""
+		
+		if inlist("`table'", "atultinitiation", "postult", "ult_drug") {
+			local xtitle "Date of ULT initiation"
+		}
+		else {
+			local xtitle ""
+		}
 		
 		***Extract variables of interest from data table
 		levelsof outcome_name, local(outcomes)
@@ -792,58 +1154,98 @@ foreach table in ult_drug flare_drug flares {
 	keep if demog_group == "all"
 		
 	***Generate 3-monthly moving averages for proportions
-	bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
+	bysort outcome_name outcome_desc (month_year): gen prop_ma = (prop[_n-1] + prop[_n] + prop[_n+1])/3
 
 	**Set y-axis format and title
 	local format "format(%9.0f)"
 	local ytitle "Percentage of patients"
 
-	***Set x-axis format and title
+	***Set x-axis format and title //for this graph, x-axis is end date + 2 years
 	local xlabel ""
-	forvalues y = $studystart_year(1)`= $studyend_year + 1' {
+	forvalues y = $studystart_year(1)`= $studyend_year + 2' {
 		local m = ym(`y', 1)
 		local xlabel `xlabel' `m' "`y'"
 	}
-	local xtitle ""
+	
+	if inlist("`table'", "baseline", "postdiagnosis") {
+		local xtitle "Date of diagnosis"
+	}
+	else if inlist("`table'", "atultinitiation", "postult", "ult_drug") {
+		local xtitle "Date of ULT initiation"
+	}
+	else if "`table'" == "posttarget" {
+		local xtitle "Date of urate target attainment"
+	}
+	else if "`table'" == "ultrisk" {
+		local xtitle "Date of risk factor onset for ULT initiation"
+	}
+	else if "`table'" == "febux_mace" {
+		local xtitle "Date of febuxostat initiation"
+	}
+	else if inlist("`table'", "flare_blood", "flare_drug", "flares") {
+		local xtitle "Date of flare"
+	}
+	else {
+		local xtitle ""
+	}
 	
 	***Extract variables of interest from data table
-	levelsof outcome_name, local(outcomes)
-	di as txt `"`outcomes'"'
-	
-	***Colour palette to cycle through
-    local colours "emerald orange blue dkgreen cranberry navy maroon teal sienna purple"
+	levelsof outcome_name, local(outcome_groups)
+	local n_outcomes : word count `outcome_groups'
 
-    ***Store plots and legend labels
-    local plots ""
-    local legorder ""
-    local leglabels ""
+	di as text "Table: `table'"
+	di as text "Number of outcome_name values: `n_outcomes'"
+	di as text `"Outcome groups: `outcome_groups'"'
 
-    local i = 0
-    foreach outcome of local outcomes {
-        local ++i
-        local colour : word `i' of `colours'
-        if "`colour'"=="" local colour "black"
-		
-		****Single plot per subset: moving average line
-		local thisplot line prop_ma month_year if outcome_name==`"`outcome'"', lcolor(`colour') lpattern(solid)
-		
-		if `i' == 1 local plots `thisplot'
-		else local plots `plots' || `thisplot'
-		di as txt `"`plots'"'
+	***Loop over outcome_name values
+	foreach outcome_group of local outcome_groups {
 
-		****Get matching outcome description
-		levelsof outcome_desc if outcome_name=="`outcome'", local(outcome_disp) clean
+		***Extract levels within this outcome_name
+		levelsof outcome_desc if outcome_name == "`outcome_group'", local(outcomes)
+		local n_lines : word count `outcomes'
 
-		****Legend: keep only the moving average lines
-		local lineidx = `i'
-		local legorder `legorder' `lineidx'
-		local leglabels `leglabels' label(`lineidx' `"`outcome_disp'"')
-		di as txt `"`leglabels'"'
+		di as text "Number of lines: `n_lines'"
+		di as text `"Outcome descriptions: `outcomes'"'
+
+		if `n_lines' == 0 {
+			di as error "No outcome_desc levels found for `outcome_group'; skipping"
+			continue
 		}
+		
+		***Colour palette to cycle through
+		local colours "emerald orange blue dkgreen cranberry navy maroon teal sienna purple"
 
+		***Store plots and legend labels
+		local plots ""
+		local legorder ""
+		local leglabels ""
+
+		local i = 0
+		
+		***Loop over outcome levels
+		foreach outcome of local outcomes {
+			local ++i
+			local colour : word `i' of `colours'
+			if "`colour'"=="" local colour "black"
+			
+			****Single plot per subset: moving average line
+			local thisplot line prop_ma month_year if outcome_name == "`outcome_group'" & outcome_desc == `"`outcome'"', lcolor(`colour') lpattern(solid)
+			
+			if `i' == 1 local plots `thisplot'
+			else local plots `plots' || `thisplot'
+			di as txt `"`plots'"'
+
+			****Legend: keep only the moving average lines
+			local lineidx = `i'
+			local legorder `legorder' `lineidx'
+			local leglabels `leglabels' label(`lineidx' `"`outcome'"')
+			di as txt `"`leglabels'"'
+		}
+	
 	***Build plots
-    twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(10)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'", replace) saving("$projectdir/output/figures/temporal_plot_`table'.gph", replace)
-	graph export "$projectdir/output/figures/temporal_plot_`table'.$img", replace
+    twoway `plots' ytitle("`ytitle'", size(medsmall)) ylabel(0(10)100, `format' nogrid labsize(small)) yscale(range(0(20)100)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel($intervention "NICE Guideline", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline($intervention) legend(order(`legorder') `leglabels') xsize(16) ysize(9) name("`table'_`outcome_group'", replace) saving("$projectdir/output/figures/temporal_plot_`table'_`outcome_group'.gph", replace)
+	graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome_group'.$img", replace
+	}
 }
 
 log close
