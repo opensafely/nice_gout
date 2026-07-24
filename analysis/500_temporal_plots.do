@@ -84,15 +84,21 @@ set scheme plotplainblind
 
 foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiagnosis baseline {
 	
-	**Check table exists first
-	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	**Import rounded and redacted data tables
+	capture	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+
 	if _rc {
-		di as text "data_table_`table'.csv not found; skipping."
+		di as error "Unable to import data_table_`table'.csv; skipping"
 		continue
 	}
 
-	**Import rounded and redacted data tables
-	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	quietly count
+
+	if r(N) == 0 {
+		di as text "data_table_`table'.csv contains no rows; skipping"
+		continue
+	}
+
 	di "`table'"
 
 	**Extract outcomes of interest from data table
@@ -314,15 +320,21 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 **Loop through data tables
 foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiagnosis baseline {
 	
-	**Check table exists first
-	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	***Import rounded and redacted data tables
+	capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	
 	if _rc {
-		di as text "data_table_`table'.csv not found; skipping."
+		di as error "Unable to import data_table_`table'.csv; skipping"
 		continue
 	}
-	
-	***Import rounded and redacted data tables
-	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+
+	quietly count
+
+	if r(N) == 0 {
+		di as text "data_table_`table'.csv contains no rows; skipping"
+		continue
+	}
+
 	di "`table'"
 	
 	tempfile table_base
@@ -366,19 +378,25 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 			
 			di "`demog_var'"
 			keep if demog_group == substr("`demog_var'", 1, 3)
-			
-			***Skip if no observations
+
+			***Skip if no demographic results exist for this outcome
 			count
-			if r(N)==0 continue
-			
-			***Optional: replace demographic levels as 0 with >50% missing proportions
+			if r(N) == 0 {
+				di as text "No `demog_var' results for `outcome'; skipping."
+				continue
+			}
+
+			***Skip if all proportions are missing
+			count if !missing(prop)
+			if r(N) == 0 {
+				di as text "All `demog_var' proportions missing for `outcome'; skipping."
+				continue
+			}
+
+			***Optional: replace demographic levels with 0 where >50% of proportions are missing
 			bysort demog_level: egen prop_missing = mean(missing(prop))
 			replace prop = 0 if prop_missing > 0.5
 			drop prop_missing
-
-			***Skip if no demographic levels remain
-			count
-			if r(N) == 0 continue
 	
 			***Convert date format
 			rename month_year month_year_s
@@ -541,21 +559,25 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 
 *Single line figures for full cohort (yearly variables) ==================================*/
 
-**Loop through data tables with different inclusion criteria
-
 **Individuals prescribed febuxostat (with/without MACE)
 
 foreach table in febux_mace {
 	
-	**Check table exists first
-	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	**Import rounded and redacted data tables
+	capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	
 	if _rc {
-		di as text "data_table_`table'.csv not found; skipping."
+		di as error "Unable to import data_table_`table'.csv; skipping"
 		continue
 	}
 
-	**Import rounded and redacted data tables
-	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	quietly count
+
+	if r(N) == 0 {
+		di as text "data_table_`table'.csv contains no rows; skipping"
+		continue
+	}
+
 	di "`table'"
 
 	**Extract outcomes of interest from data table
@@ -645,20 +667,26 @@ foreach table in febux_mace {
 	}
 }
 
-*Multi-line figures by demographic characteristics (yearly variables) ==================================*/
+/*Multi-line figures by demographic characteristics (yearly variables) ==================================*
 
 **Loop through data tables
 foreach table in febux_mace {
 	
-	**Check table exists first
-	capture confirm file "$projectdir/output/tables/data_table_`table'.csv"
+	***Import rounded and redacted data tables
+	capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+	
 	if _rc {
-		di as text "data_table_`table'.csv not found; skipping."
+		di as error "Unable to import data_table_`table'.csv; skipping"
 		continue
 	}
-	
-	***Import rounded and redacted data tables
-	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+
+	quietly count
+
+	if r(N) == 0 {
+		di as text "data_table_`table'.csv contains no rows; skipping"
+		continue
+	}
+
 	di "`table'"
 	
 	tempfile table_base
@@ -856,6 +884,7 @@ foreach table in febux_mace {
 		}	
 	}	
 }
+*/
 
 *Multi-line figures for selected blood tests and comorbidities (grouped binary variables) (full cohort) =============*/
 
@@ -873,7 +902,21 @@ foreach table in postdiagnosis {
 		di "`group'"
 		
 		**Import rounded and redacted data tables
-		import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+		capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+		
+		if _rc {
+			di as error "Unable to import data_table_`table'.csv; skipping"
+			continue
+		}
+
+		quietly count
+
+		if r(N) == 0 {
+			di as text "data_table_`table'.csv contains no rows; skipping"
+			continue
+		}
+
+		di "`table'"
 		
 		**Keep outcomes of interest
 		keep if inlist(outcome_name, ``group'')
@@ -1003,7 +1046,21 @@ foreach table in postult {
 		di "`group'"
 		
 		**Import rounded and redacted data tables
-		import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+		capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+		
+		if _rc {
+			di as error "Unable to import data_table_`table'.csv; skipping"
+			continue
+		}
+
+		quietly count
+
+		if r(N) == 0 {
+			di as text "data_table_`table'.csv contains no rows; skipping"
+			continue
+		}
+
+		di "`table'"
 		
 		**Keep outcomes of interest
 		keep if inlist(outcome_name, ``group'')
@@ -1126,11 +1183,22 @@ foreach table in postult {
 
 *Multi-line figures for categorical variables (full cohort) ==================================
 
-foreach table in ult_drug flare_drug flares {
+foreach table in ult_drug flares {
 	
-	***Import rounded and redacted data tables
-	import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
-	di "`table'"
+    ***Import rounded and redacted data tables
+    capture import delimited "$projectdir/output/tables/data_table_`table'.csv", clear
+    if _rc {
+        di as error "Unable to import data_table_`table'.csv; skipping"
+        continue
+    }
+
+    quietly count
+    if r(N) == 0 {
+        di as text "data_table_`table'.csv contains no rows; skipping"
+        continue
+    }
+
+    di "`table'"
 
 	***Convert date format
 	rename month_year month_year_s

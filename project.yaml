@@ -265,15 +265,15 @@ actions:
         table1: output/tables/melogit_summary.csv
         table2: output/tables/logistic_summary.csv
 
-  # survival_models:
-  #   run: stata-mp:latest analysis/700_survival_models.do "gout" "2026-06-30"
-  #   needs: [cohort_cleaning]
-  #   outputs:
-  #     moderately_sensitive:
-  #       log1: logs/survival_models.log   
-  #       table1: output/tables/landmark_cox_summary.csv
-  #       figure1: output/figures/km_*.svg
-  #       figure2: output/figures/loglog_*.svg
+  survival_models:
+    run: stata-mp:latest analysis/700_survival_models.do "gout" "2026-06-30"
+    needs: [cohort_cleaning]
+    outputs:
+      moderately_sensitive:
+        log1: logs/survival_models.log   
+        table1: output/tables/landmark_cox_summary.csv
+        figure1: output/figures/km_*.svg
+        figure2: output/figures/loglog_*.svg
 
   generate_notebook:
     run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input

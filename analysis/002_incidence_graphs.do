@@ -222,7 +222,9 @@ foreach disease of local disease_list {
 				local upper_`stem' = round(1.10 * `rmax', 10)
 			}
 
-			if `lower_`stem'' < 0.2 local lower_`stem' = 0
+			if `lower_`stem'' <= 0.2 * `upper_`stem'' {
+				local lower_`stem' = 0
+			}
 			if `upper_`stem'' <= `lower_`stem'' local upper_`stem' = `lower_`stem'' + 1
 
 			if `upper_`stem'' < 2 {
@@ -265,12 +267,12 @@ foreach disease of local disease_list {
 		local xintlab = `intervention' + 1 
 		
 		*Adjusted incidence overall (scatter with moving average)
-		twoway scatter s_rate_all mo_year_diagn, ytitle("`ytitle'", size(medsmall)) color(emerald%20) msymbol(circle) || line s_rate_all_ma mo_year_diagn, lcolor(emerald) lstyle(solid) ylabel(`ylab_all', `format_all' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(off) xsize(16) ysize(9) name("inc_adj_`disease'", replace) saving("$projectdir/output/figures/inc_`disease'.gph", replace)
+		twoway scatter s_rate_all mo_year_diagn, ytitle("`ytitle'", size(medsmall)) color(emerald%15) msymbol(circle) || line s_rate_all_ma mo_year_diagn, lcolor(emerald) lstyle(solid) ylabel(`ylab_all', `format_all' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(off) xsize(16) ysize(9) name("inc_adj_`disease'", replace) saving("$projectdir/output/figures/inc_`disease'.gph", replace)
 			*graph export "$projectdir/output/figures/inc_`disease'.png", replace
 			graph export "$projectdir/output/figures/inc_`disease'.svg", replace
 	
 		*Adjusted incidence by sex (scatter with moving average)
-		twoway scatter s_rate_male mo_year_diagn, ytitle("`ytitle'", size(medsmall)) color(eltblue%20) mlcolor(eltblue%20) msymbol(circle) || line s_rate_male_ma mo_year_diagn, lcolor(midblue) lstyle(solid) || scatter s_rate_female mo_year_diagn, color(orange%20) mlcolor(orange%20) msymbol(circle)  || line s_rate_female_ma mo_year_diagn, lcolor(red) lstyle(solid) ylabel(`ylab_sex', `format_sex' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) order(2 "Male" 4 "Female")) xsize(16) ysize(9) name(inc_`disease'_sex, replace) saving("$projectdir/output/figures/inc_`disease'_sex.gph", replace)
+		twoway scatter s_rate_male mo_year_diagn, ytitle("`ytitle'", size(medsmall)) color(eltblue%15) mlcolor(eltblue%15) msymbol(circle) || line s_rate_male_ma mo_year_diagn, lcolor(midblue) lstyle(solid) || scatter s_rate_female mo_year_diagn, color(orange%15) mlcolor(orange%15) msymbol(circle)  || line s_rate_female_ma mo_year_diagn, lcolor(red) lstyle(solid) ylabel(`ylab_sex', `format_sex' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "COVID-19", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(region(fcolor(white%0)) order(2 "Male" 4 "Female")) xsize(16) ysize(9) name(inc_`disease'_sex, replace) saving("$projectdir/output/figures/inc_`disease'_sex.gph", replace)
 			*graph export "$projectdir/output/figures/inc_`disease'_sex.png", replace
 			graph export "$projectdir/output/figures/inc_`disease'_sex.svg", replace
 
@@ -352,7 +354,9 @@ foreach disease of local disease_list {
 				local upper_`stem' = round(1.10 * `rmax', 10)
 			}
 
-			if `lower_`stem'' < 0.2 local lower_`stem' = 0
+			if `lower_`stem'' <= 0.2 * `upper_`stem'' {
+				local lower_`stem' = 0
+			}
 			if `upper_`stem'' <= `lower_`stem'' local upper_`stem' = `lower_`stem'' + 1
 
 			if `upper_`stem'' < 2 {
