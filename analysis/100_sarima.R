@@ -82,7 +82,11 @@ max_years <- ceiling(max_index / 12)
 variables <- c("incidence")
 
 # For writing output tables
-first_write <- TRUE
+file_name <- "output/tables/change_incidence_byyear.csv"
+
+if (file.exists(file_name)) {
+  file.remove(file_name)
+}
 
 # Loop through diseases
 for (j in 1:length(disease_list)) {
@@ -128,6 +132,16 @@ for (j in 1:length(disease_list)) {
         "Insufficient data for SARIMA model",
         cex = 1.3
       )
+      dev.off()
+      
+      png(
+        paste0("output/figures/auto_residuals_", dis, "_", var, ".png"),
+        width = 1200,
+        height = 800,
+        res = 150
+      )
+      plot.new()
+      text(0.5, 0.5, "Insufficient data for SARIMA model", cex = 1.3)
       dev.off()
       
       next
@@ -613,7 +627,19 @@ for (j in 1:length(disease_list)) {
       message("Prophet package not installed, skipping forecast.")
     }
   }
-}    
+}
+
+#Failsafe 
+if (!file.exists(file_name)) {
+  write.csv(
+    data.frame(
+      disease = character(),
+      measure = character()
+    ),
+    file_name,
+    row.names = FALSE
+  )
+}
 
 graphics.off()
 sink()

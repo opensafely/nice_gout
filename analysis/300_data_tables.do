@@ -191,70 +191,68 @@ use "$projectdir/output/data/cohort_processed.dta", clear
 **Set monthly time variable
 local time_variable "${disease}_moyear"
 
-**Define outcome lists
+**Define all outcomes
 local main_outcomes urate_bl_360_repeat had_urate_bl
 
-**Store full-cohort and demographic result files separately
-local file_number 0
-local n_full_files 0
+**Define outcomes requiring demographic breakdowns
+local demog_outcomes had_urate_bl
+
+**Generate full-cohort results for all outcomes
+tempfile full_results
+
+rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
+
+**Generate selected outcomes by demographic group
 local n_demog_files 0
 
-**Run for outcomes
-local ++file_number
-tempfile result`file_number'
+if `"`demog_outcomes'"' != "" {
 
-rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    foreach demog_var of varlist $demographic {
 
-local ++n_full_files
-local full_file`n_full_files' `"`result`file_number''"'
+        local ++n_demog_files
+        tempfile demog_result`n_demog_files'
 
-**Results by demographic group
-foreach demog_var of varlist $demographic {
+        rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
 
-	local ++file_number
-	tempfile result`file_number'
-
-	rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-	
-	local ++n_demog_files
-	local demog_file`n_demog_files' `"`result`file_number''"'
+        local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+    }
 }
 
 **Combine demographic result files horizontally
-forvalues i = 1/`n_demog_files' {
+if `n_demog_files' > 0 {
 
-	if `i' == 1 {
-		use `"`demog_file`i''"', clear
-	}
-	else {
-		merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-	}
+    forvalues i = 1/`n_demog_files' {
+        if `i' == 1 {
+            use `"`demog_file`i''"', clear
+        }
+        else {
+            merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+        }
+    }
+    save "$projectdir/output/data/combined_demog.dta", replace
 }
 
-tempfile combined_demog
-save "`combined_demog'", replace
+**Return to full-cohort results
+use "`full_results'", clear
 
-**Combine full-cohort result files vertically
-forvalues i = 1/`n_full_files' {
+**Merge demographic columns onto selected full-cohort outcomes
+if `n_demog_files' > 0 {
 
-	if `i' == 1 {
-		use `"`full_file`i''"', clear
-	}
-	else {
-		append using `"`full_file`i''"'
-	}
+    merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog.dta"
+
+    **Using-only observations should not occur
+    assert _merge != 2
+    drop _merge
 }
-
-**Merge demographic columns onto full-cohort rows
-merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
 
 **Drop missing time periods
 drop if missing(month_year)
 
-**Sort and save final tables
+**Check uniqueness and sort
 isid month_year outcome_name
 sort outcome_name outcome_desc month_year
 
+**Save final tables
 save "$projectdir/output/data/data_table_baseline.dta", replace
 export delimited using "$projectdir/output/tables/data_table_baseline.csv", replace
 
@@ -271,97 +269,80 @@ foreach t in 12 {
     **Set monthly time variable
     local time_variable "${disease}_moyear"
 
-    **Define outcome lists
+    **Define all non-outpatient outcomes
     local main_outcomes chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m creatinine_within_`t'm hba1c_within_`t'm cholesterol_within_`t'm ult_`t'm
+	
+	 **Define outpatient outcomes (processed separately due to availability of OPA data)
     local opa_outcomes "${outpatients}_refopa_`t'm_risk"
 
-    **Store full-cohort and demographic result files separately
-	local file_number 0
-	local n_full_files 0
-	local n_demog_files 0
+    **Define outcomes requiring demographic breakdowns
+    local demog_outcomes chd_12m diabetes_12m cva_12m ckd_comb_12m depression_12m ult_`t'm
 
-    *Process outpatient outcomes separately (OPA data available from July 2019 onwards)
+    **Generate outpatient results for full cohort only
     preserve
         keep if `time_variable' >= tm(2019m7)
+		
+        tempfile opa_results
 
-        **Full-cohort OPA results
-        local ++file_number
-        tempfile result`file_number'
-
-        rounded_datatable_multi `opa_outcomes', timevar(`time_variable') outfile(`result`file_number'')
-        
-		local ++n_full_files
-        local full_file`n_full_files' `"`result`file_number''"'
-
-        **OPA results by demographic group
-        foreach demog_var of varlist $demographic {
-
-            local ++file_number
-            tempfile result`file_number'
-
-            rounded_datatable_demog_multi `opa_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-			
-            local ++n_demog_files
-			local demog_file`n_demog_files' `"`result`file_number''"'
-        }
+        rounded_datatable_multi `opa_outcomes', timevar(`time_variable') outfile(`opa_results')
     restore
 
-    *Process all other outcomes
-    local ++file_number
-    tempfile result`file_number'
+    **Generate full-cohort results for all other outcomes
+    tempfile main_results
 
-    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`main_results')
 
-    local ++n_full_files
-	local full_file`n_full_files' `"`result`file_number''"'
+    **Generate selected outcomes by demographic group
+    local n_demog_files 0
 
-    **Results by demographic group
-    foreach demog_var of varlist $demographic {
+    if `"`demog_outcomes'"' != "" {
 
-        local ++file_number
-        tempfile result`file_number'
+        foreach demog_var of varlist $demographic {
 
-        rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-        
-		local ++n_demog_files
-		local demog_file`n_demog_files' `"`result`file_number''"'
+            local ++n_demog_files
+            tempfile demog_result`n_demog_files'
+
+            rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
+
+            local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+        }
     }
 
     **Combine demographic result files horizontally
-	forvalues i = 1/`n_demog_files' {
+    if `n_demog_files' > 0 {
+        forvalues i = 1/`n_demog_files' {
+            if `i' == 1 {
+                use `"`demog_file`i''"', clear
+            }
+            else {
+                merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+            }
+        }
+        save "$projectdir/output/data/combined_demog_postdiagnosis.dta", replace
+    }
 
-		if `i' == 1 {
-			use `"`demog_file`i''"', clear
-		}
-		else {
-			merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-		}
-	}
+    **Combine full-cohort results vertically
+    use "`main_results'", clear
+    append using "`opa_results'"
 
-	tempfile combined_demog
-	save "`combined_demog'", replace
+    **Merge demographic columns onto selected outcomes
+    if `n_demog_files' > 0 {
 
-	**Combine full-cohort result files vertically
-	forvalues i = 1/`n_full_files' {
+        merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_postdiagnosis.dta"
 
-		if `i' == 1 {
-			use `"`full_file`i''"', clear
-		}
-		else {
-			append using `"`full_file`i''"'
-		}
-	}
-
-    **Merge demographic columns onto full-cohort rows
-    merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
+        **Full-cohort-only outcomes should be master-only
+        assert _merge != 2
+        drop _merge
+    }
 
     **Drop missing time periods
     drop if missing(month_year)
 
-    **Sort and save final tables
-	isid month_year outcome_name
+    **Check uniqueness and sort
+    isid month_year outcome_name
     sort outcome_name outcome_desc month_year
 
+    **Save final tables
     save "$projectdir/output/data/data_table_postdiagnosis.dta", replace
     export delimited using "$projectdir/output/tables/data_table_postdiagnosis.csv", replace
 }
@@ -372,69 +353,63 @@ foreach t in 12 {
 use "$projectdir/output/data/cohort_processed.dta", clear
 
 **Set inclusion criteria - limited to patients who initiated ULT
-keep if ult_first_date!=.
+keep if ult_first_date != .
 
 **Set monthly time variable (date of first ULT prescription)
 gen ult_first_date_my = mofd(ult_first_date)
 format ult_first_date_my %tmMon-CCYY
 local time_variable "ult_first_date_my"
 
-**Define outcome lists
-local main_outcomes ult_high ult_prophylaxis_2 ult_prophylaxis
+**Define all outcomes
+local main_outcomes ult_high ult_prophylaxis
 
-**Store full-cohort and demographic result files separately
-local file_number 0
-local n_full_files 0
+**Define outcomes requiring demographic breakdowns
+local demog_outcomes ult_high ult_prophylaxis
+
+**Generate full-cohort results
+tempfile full_results
+
+rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
+
+**Generate selected outcomes by demographic group
 local n_demog_files 0
 
-**Run outcomes
-local ++file_number
-tempfile result`file_number'
+if `"`demog_outcomes'"' != "" {
+    foreach demog_var of varlist $demographic {
+		
+        local ++n_demog_files
+        tempfile demog_result`n_demog_files'
 
-rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+        rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
 
-local ++n_full_files
-local full_file`n_full_files' `"`result`file_number''"'
-
-**Results by demographic group
-foreach demog_var of varlist $demographic {
-
-	local ++file_number
-	tempfile result`file_number'
-
-	rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-	
-	local ++n_demog_files
-	local demog_file`n_demog_files' `"`result`file_number''"'
+        local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+    }
 }
 
 **Combine demographic result files horizontally
-forvalues i = 1/`n_demog_files' {
-
-	if `i' == 1 {
-		use `"`demog_file`i''"', clear
-	}
-	else {
-		merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-	}
+if `n_demog_files' > 0 {
+    forvalues i = 1/`n_demog_files' {
+        if `i' == 1 {
+            use `"`demog_file`i''"', clear
+        }
+        else {
+            merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+        }
+    }
+    save "$projectdir/output/data/combined_demog_atultinitiation.dta", replace
 }
 
-tempfile combined_demog
-save "`combined_demog'", replace
+**Return to full-cohort results
+use "`full_results'", clear
 
-**Combine full-cohort result files vertically
-forvalues i = 1/`n_full_files' {
+**Merge demographic columns onto selected outcomes
+if `n_demog_files' > 0 {
 
-	if `i' == 1 {
-		use `"`full_file`i''"', clear
-	}
-	else {
-		append using `"`full_file`i''"'
-	}
+    merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_atultinitiation.dta"
+
+    assert _merge != 2
+    drop _merge
 }
-
-**Merge demographic columns onto full-cohort rows
-merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
 
 **Drop missing time periods
 drop if missing(month_year)
@@ -453,76 +428,72 @@ foreach t in 12 {
     **Import cleaned/processed cohort
     use "$projectdir/output/data/cohort_processed.dta", clear
 
-	**Set inclusion criteria - limited to those who had at least t months duration of follow-up post-ULT (no restriction on ULT within 12m)
-	keep if has_`t'm_fup_ult==1
+    **Set inclusion criteria - limited to those who had at least t months duration of follow-up post-ULT
+    keep if has_`t'm_fup_ult == 1
 
-	**Set monthly time variable (date of first ULT prescription)
-	gen ult_first_date_my = mofd(ult_first_date)
-	format ult_first_date_my %tmMon-CCYY
-	local time_variable "ult_first_date_my"
+    **Set monthly time variable (date of first ULT prescription)
+    gen ult_first_date_my = mofd(ult_first_date)
+    format ult_first_date_my %tmMon-CCYY
+    local time_variable "ult_first_date_my"
 
-    **Define outcome lists
+    **Define all outcomes
     local main_outcomes febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
 
-    **Store full-cohort and demographic result files separately
-	local file_number 0
-	local n_full_files 0
-	local n_demog_files 0
+    **Define outcomes requiring demographic breakdowns
+    local demog_outcomes ult_ongoing_`t'm urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
 
-    **Run outcomes
-    local ++file_number
-    tempfile result`file_number'
+    **Generate full-cohort results
+    tempfile full_results
 
-    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
 
-    local ++n_full_files
-	local full_file`n_full_files' `"`result`file_number''"'
+    **Generate selected outcomes by demographic group
+    local n_demog_files 0
 
-    **Results by demographic group
-    foreach demog_var of varlist $demographic {
+    if `"`demog_outcomes'"' != "" {
 
-        local ++file_number
-        tempfile result`file_number'
+        foreach demog_var of varlist $demographic {
+			
+            local ++n_demog_files
+            tempfile demog_result`n_demog_files'
 
-        rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-        
-		local ++n_demog_files
-		local demog_file`n_demog_files' `"`result`file_number''"'
+            rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
+
+            local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+        }
     }
 
     **Combine demographic result files horizontally
-	forvalues i = 1/`n_demog_files' {
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`demog_file`i''"', clear
-		}
-		else {
-			merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-		}
-	}
+        forvalues i = 1/`n_demog_files' {
+            if `i' == 1 {
+                use `"`demog_file`i''"', clear
+            }
+            else {
+                merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+            }
+        }
+        save "$projectdir/output/data/combined_demog_postult.dta", replace
+    }
 
-	tempfile combined_demog
-	save "`combined_demog'", replace
+    **Return to full-cohort results
+    use "`full_results'", clear
 
-	**Combine full-cohort result files vertically
-	forvalues i = 1/`n_full_files' {
+    **Merge demographic columns onto selected outcomes
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`full_file`i''"', clear
-		}
-		else {
-			append using `"`full_file`i''"'
-		}
-	}
+        merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_postult.dta"
 
-    **Merge demographic columns onto full-cohort rows
-    merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
+        assert _merge != 2
+        drop _merge
+    }
 
     **Drop missing time periods
     drop if missing(month_year)
 
     **Sort and save final tables
-	isid month_year outcome_name
+    isid month_year outcome_name
     sort outcome_name outcome_desc month_year
 
     save "$projectdir/output/data/data_table_postult.dta", replace
@@ -536,83 +507,79 @@ foreach t in 12 {
     **Import cleaned/processed cohort
     use "$projectdir/output/data/cohort_processed.dta", clear
 
-	**Set inclusion criteria - limited to those who had at least t months duration of follow-up post-target attainment
-	keep if has_`t'm_fup_target==1
-	
-	**Check - for dummy data only
-	count
-	if r(N) == 0 {
-		di as text "No observations with has_`t'm_fup_target == 1; skipping `t'-month analysis"
-		continue
-	}
+    **Set inclusion criteria - limited to those who had at least t months duration of follow-up post-target attainment
+    keep if has_`t'm_fup_target == 1
 
-	**Set monthly time variable (date of first ULT prescription)
-	gen target_first_date_my = mofd(urate_below360_ult_date)
-	format target_first_date_my %tmMon-CCYY
-	local time_variable "target_first_date_my"
+    **Check - for dummy data only
+    count
+    if r(N) == 0 {
+        di as text "No observations with has_`t'm_fup_target == 1; skipping `t'-month analysis"
+        continue
+    }
 
-    **Define outcome lists
+    **Set monthly time variable (date of target attainment)
+    gen target_first_date_my = mofd(urate_below360_ult_date)
+    format target_first_date_my %tmMon-CCYY
+    local time_variable "target_first_date_my"
+
+    **Define all outcomes
     local main_outcomes repeat_below360_`t'm_ult repeat_after360_`t'm_ult
 
-    **Store full-cohort and demographic result files separately
-	local file_number 0
-	local n_full_files 0
-	local n_demog_files 0
+    **Define outcomes requiring demographic breakdowns
+    local demog_outcomes
 
-    **Run outcomes
-    local ++file_number
-    tempfile result`file_number'
+    **Generate full-cohort results
+    tempfile full_results
 
-    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
 
-    local ++n_full_files
-	local full_file`n_full_files' `"`result`file_number''"'
+    **Generate selected outcomes by demographic group
+    local n_demog_files 0
 
-    **Results by demographic group
-    foreach demog_var of varlist $demographic {
+    if `"`demog_outcomes'"' != "" {
 
-        local ++file_number
-        tempfile result`file_number'
+        foreach demog_var of varlist $demographic {
 
-        rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-        
-		local ++n_demog_files
-		local demog_file`n_demog_files' `"`result`file_number''"'
+            local ++n_demog_files
+            tempfile demog_result`n_demog_files'
+
+            rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
+
+            local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+        }
     }
 
     **Combine demographic result files horizontally
-	forvalues i = 1/`n_demog_files' {
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`demog_file`i''"', clear
-		}
-		else {
-			merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-		}
-	}
+        forvalues i = 1/`n_demog_files' {
+            if `i' == 1 {
+                use `"`demog_file`i''"', clear
+            }
+            else {
+                merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+            }
+        }
+        save "$projectdir/output/data/combined_demog_posttarget.dta", replace
+    }
 
-	tempfile combined_demog
-	save "`combined_demog'", replace
+    **Return to full-cohort results
+    use "`full_results'", clear
 
-	**Combine full-cohort result files vertically
-	forvalues i = 1/`n_full_files' {
+    **Merge demographic columns onto selected outcomes
+    if `n_demog_files' > 0 {
+		
+        merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_posttarget.dta"
 
-		if `i' == 1 {
-			use `"`full_file`i''"', clear
-		}
-		else {
-			append using `"`full_file`i''"'
-		}
-	}
-
-    **Merge demographic columns onto full-cohort rows
-    merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
+        assert _merge != 2
+        drop _merge
+    }
 
     **Drop missing time periods
     drop if missing(month_year)
 
     **Sort and save final tables
-	isid month_year outcome_name
+    isid month_year outcome_name
     sort outcome_name outcome_desc month_year
 
     save "$projectdir/output/data/data_table_posttarget.dta", replace
@@ -625,77 +592,73 @@ foreach t in 12 {
 
     **Import cleaned/processed cohort
     use "$projectdir/output/data/cohort_processed.dta", clear
-		
-	**Set inclusion criteria - should be limited to those who had at least t months duration of post-risk date
-	keep if has_`t'm_fup_risk==1
 
-	**Set monthly time variable (date patient became at risk for ULT)
-	gen ult_risk_date_my = mofd(ult_risk_date_dx)
-	format ult_risk_date_my %tmMon-CCYY
-	local time_variable "ult_risk_date_my"
+    **Set inclusion criteria - limited to those who had at least t months duration of follow-up post-risk date
+    keep if has_`t'm_fup_risk == 1
 
-    **Define outcome lists
+    **Set monthly time variable (date patient became at risk for ULT)
+    gen ult_risk_date_my = mofd(ult_risk_date_dx)
+    format ult_risk_date_my %tmMon-CCYY
+    local time_variable "ult_risk_date_my"
+
+    **Define all outcomes
     local main_outcomes ult_risk_p_`t'm
 
-    **Store full-cohort and demographic result files separately
-	local file_number 0
-	local n_full_files 0
-	local n_demog_files 0
+    **Define outcomes requiring demographic breakdowns
+    local demog_outcomes ult_risk_p_`t'm
 
-    **Run outcomes
-    local ++file_number
-    tempfile result`file_number'
+    **Generate full-cohort results
+    tempfile full_results
 
-    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
 
-    local ++n_full_files
-	local full_file`n_full_files' `"`result`file_number''"'
+    **Generate selected outcomes by demographic group
+    local n_demog_files 0
 
-    **Results by demographic group
-    foreach demog_var of varlist $demographic {
+    if `"`demog_outcomes'"' != "" {
 
-        local ++file_number
-        tempfile result`file_number'
+        foreach demog_var of varlist $demographic {
 
-        rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-        
-		local ++n_demog_files
-		local demog_file`n_demog_files' `"`result`file_number''"'
+            local ++n_demog_files
+            tempfile demog_result`n_demog_files'
+
+            rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
+
+            local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+        }
     }
 
     **Combine demographic result files horizontally
-	forvalues i = 1/`n_demog_files' {
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`demog_file`i''"', clear
-		}
-		else {
-			merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-		}
-	}
+        forvalues i = 1/`n_demog_files' {
+            if `i' == 1 {
+                use `"`demog_file`i''"', clear
+            }
+            else {
+                merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+            }
+        }
+        save "$projectdir/output/data/combined_demog_ultrisk.dta", replace
+    }
 
-	tempfile combined_demog
-	save "`combined_demog'", replace
-
-	**Combine full-cohort result files vertically
-	forvalues i = 1/`n_full_files' {
-
-		if `i' == 1 {
-			use `"`full_file`i''"', clear
-		}
-		else {
-			append using `"`full_file`i''"'
-		}
-	}
+    **Return to full-cohort results
+    use "`full_results'", clear
 
     **Merge demographic columns onto full-cohort rows
-    merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
+    if `n_demog_files' > 0 {
+
+        merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_ultrisk.dta"
+
+        assert _merge != 2
+        drop _merge
+    }
 
     **Drop missing time periods
     drop if missing(month_year)
 
     **Sort and save final tables
-	isid month_year outcome_name
+    isid month_year outcome_name
     sort outcome_name outcome_desc month_year
 
     save "$projectdir/output/data/data_table_ultrisk.dta", replace
@@ -708,68 +671,64 @@ foreach t in 12 {
 use "$projectdir/output/data/cohort_processed.dta", clear
 
 **Set inclusion criteria - limited to those who had received febuxostat
-keep if febuxostat_first_date!=.
+keep if febuxostat_first_date != .
 
-**Set yearly time variable - this yearly not monthly, due to small numbers
+**Set yearly time variable - yearly rather than monthly due to small numbers
 gen febux_first_fy = year(febuxostat_first_date) - (month(febuxostat_first_date) < 7)
 local time_variable "febux_first_fy"
 
-**Define outcome lists
+**Define all outcomes
 local main_outcomes febux_mace
 
-**Store full-cohort and demographic result files separately
-local file_number 0
-local n_full_files 0
+**Define outcomes requiring demographic breakdowns
+local demog_outcomes
+
+**Generate full-cohort results
+tempfile full_results
+
+rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
+
+**Generate selected outcomes by demographic group
 local n_demog_files 0
 
-**Run outcomes
-local ++file_number
-tempfile result`file_number'
+if `"`demog_outcomes'"' != "" {
 
-rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    foreach demog_var of varlist $demographic {
 
-local ++n_full_files
-local full_file`n_full_files' `"`result`file_number''"'
+        local ++n_demog_files
+        tempfile demog_result`n_demog_files'
 
-**Results by demographic group
-foreach demog_var of varlist $demographic {
+        rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
 
-	local ++file_number
-	tempfile result`file_number'
-
-	rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-	
-	local ++n_demog_files
-	local demog_file`n_demog_files' `"`result`file_number''"'
+        local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+    }
 }
 
 **Combine demographic result files horizontally
-forvalues i = 1/`n_demog_files' {
+if `n_demog_files' > 0 {
 
-	if `i' == 1 {
-		use `"`demog_file`i''"', clear
-	}
-	else {
-		merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-	}
+    forvalues i = 1/`n_demog_files' {
+        if `i' == 1 {
+            use `"`demog_file`i''"', clear
+        }
+        else {
+            merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+        }
+    }
+    save "$projectdir/output/data/combined_demog_febux_mace.dta", replace
 }
 
-tempfile combined_demog
-save "`combined_demog'", replace
+**Return to full-cohort results
+use "`full_results'", clear
 
-**Combine full-cohort result files vertically
-forvalues i = 1/`n_full_files' {
+**Merge demographic columns onto selected outcomes
+if `n_demog_files' > 0 {
 
-	if `i' == 1 {
-		use `"`full_file`i''"', clear
-	}
-	else {
-		append using `"`full_file`i''"'
-	}
+    merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_febux_mace.dta"
+
+    assert _merge != 2
+    drop _merge
 }
-
-**Merge demographic columns onto full-cohort rows
-merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
 
 **Drop missing time periods
 drop if missing(month_year)
@@ -787,83 +746,78 @@ foreach t in 12 {
 
     **Import cleaned/processed cohort
     use "$projectdir/output/data/cohort_processed.dta", clear
-	
-	**Set inclusion criteria - limited to those who had at least 12 months of follow-up after first flare date
-	keep if has_`t'm_fup_flare==1 //may not need full 12 months
 
-	**Set monthly time variable (date of first flare)
-	gen first_flare_date_my = mofd(first_flare_overall_date)
-	format first_flare_date_my %tmMon-CCYY
-	local time_variable "first_flare_date_my"
+    **Set inclusion criteria - limited to those who had at least 12 months of follow-up after first flare date
+    keep if has_`t'm_fup_flare == 1
 
-    **Define outcome lists
+    **Set monthly time variable (date of first flare)
+    gen first_flare_date_my = mofd(first_flare_overall_date)
+    format first_flare_date_my %tmMon-CCYY
+    local time_variable "first_flare_date_my"
+
+    **Define all outcomes
     local main_outcomes post_flare_urate
 
-    **Store full-cohort and demographic result files separately
-	local file_number 0
-	local n_full_files 0
-	local n_demog_files 0
+    **Define outcomes requiring demographic breakdowns
+    local demog_outcomes
 
-    **Run outcomes
-    local ++file_number
-    tempfile result`file_number'
+    **Generate full-cohort results
+    tempfile full_results
 
-    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`result`file_number'')
+    rounded_datatable_multi `main_outcomes', timevar(`time_variable') outfile(`full_results')
 
-    local ++n_full_files
-	local full_file`n_full_files' `"`result`file_number''"'
+    **Generate selected outcomes by demographic group
+    local n_demog_files 0
 
-    **Results by demographic group
-    foreach demog_var of varlist $demographic {
+    if `"`demog_outcomes'"' != "" {
 
-        local ++file_number
-        tempfile result`file_number'
+        foreach demog_var of varlist $demographic {
 
-        rounded_datatable_demog_multi `main_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`result`file_number'')
-        
-		local ++n_demog_files
-		local demog_file`n_demog_files' `"`result`file_number''"'
+            local ++n_demog_files
+            tempfile demog_result`n_demog_files'
+
+            rounded_datatable_demog_multi `demog_outcomes', timevar(`time_variable') demogvar(`demog_var') outfile(`demog_result`n_demog_files'')
+
+            local demog_file`n_demog_files' `"`demog_result`n_demog_files''"'
+        }
     }
 
     **Combine demographic result files horizontally
-	forvalues i = 1/`n_demog_files' {
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`demog_file`i''"', clear
-		}
-		else {
-			merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', update nogen
-		}
-	}
+        forvalues i = 1/`n_demog_files' {
+            if `i' == 1 {
+                use `"`demog_file`i''"', clear
+            }
+            else {
+                merge 1:1 month_year outcome_name outcome_desc using `"`demog_file`i''"', nogen
+            }
+        }
+        save "$projectdir/output/data/combined_demog_flare_blood.dta", replace
+    }
 
-	tempfile combined_demog
-	save "`combined_demog'", replace
+    **Return to full-cohort results
+    use "`full_results'", clear
 
-	**Combine full-cohort result files vertically
-	forvalues i = 1/`n_full_files' {
+    **Merge demographic columns onto selected outcomes
+    if `n_demog_files' > 0 {
 
-		if `i' == 1 {
-			use `"`full_file`i''"', clear
-		}
-		else {
-			append using `"`full_file`i''"'
-		}
-	}
+        merge 1:1 month_year outcome_name outcome_desc using "$projectdir/output/data/combined_demog_flare_blood.dta"
 
-    **Merge demographic columns onto full-cohort rows
-    merge 1:1 month_year outcome_name outcome_desc using "`combined_demog'", nogen
+        assert _merge != 2
+        drop _merge
+    }
 
     **Drop missing time periods
     drop if missing(month_year)
 
     **Sort and save final tables
-	isid month_year outcome_name
+    isid month_year outcome_name
     sort outcome_name outcome_desc month_year
 
     save "$projectdir/output/data/data_table_flare_blood.dta", replace
     export delimited using "$projectdir/output/tables/data_table_flare_blood.csv", replace
 }
-
 
 *Choice of first ULT drug (categorical variable, therefore processed differently) ===========================
 
@@ -911,6 +865,11 @@ use "`results'", clear
 
 drop if missing(month_year)
 
+**Optional - Remove outcomes with no non-missing proportions
+bys outcome_desc: egen has_data = max(!missing(prop_all))
+drop if has_data == 0
+drop has_data
+
 **Group all binary drug-category indicators under one outcome
 replace outcome_name = "`categorical_var'"
 
@@ -921,7 +880,7 @@ sort outcome_name outcome_desc month_year
 save "$projectdir/output/data/data_table_ult_drug.dta", replace
 export delimited using "$projectdir/output/tables/data_table_ult_drug.csv", replace
 
-*Treatment of first flare after diagnosis (categorical variable, therefore processed differently) ===========================
+/*Treatment of first flare after diagnosis (categorical variable, therefore processed differently) ===========================
 
 **Import cleaned/processed cohort
 use "$projectdir/output/data/cohort_processed.dta", clear
@@ -976,6 +935,7 @@ sort outcome_name outcome_desc month_year
 **Save and export final table
 save "$projectdir/output/data/data_table_flare_drug.dta", replace
 export delimited using "$projectdir/output/tables/data_table_flare_drug.csv", replace
+*/
 
 *Treatment of any flare after diagnosis (categorical variables) - Nb. would need to have full list of drug use after diagnosis ===========================
 
@@ -1037,6 +997,7 @@ forvalues i = 1/`n' {
 	replace outcome_desc = "`outcome_desc`i''" if trim(outcome_name) == "outcome`i'"
 	replace outcome_name = "`outcome_name`i''" if trim(outcome_name) == "outcome`i'"
 }
+
 drop if missing(month_year)
 
 isid month_year outcome_name outcome_desc

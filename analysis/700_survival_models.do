@@ -326,10 +326,33 @@ foreach outcome of local outcomes {
 	stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 		*id(patient_id)
 	
+	***Failsafe if no observations
+	quietly count if _d == 1
+	local nfail = r(N)
+
+	if `nfail' == 0 {
+		di as txt "No failures for `outcome'; skipping all analyses."
+		continue
+	}
+	
 	***Loop through exposures (primary vs. sensitivity analyses)
 	foreach exposure of local exposures {
 		
 		di as txt "Exposure = `exposure'"
+		
+		***Failsafe if exposure has no observations
+		quietly count if !missing(`exposure')
+		if r(N) == 0 {
+			di as txt "No non-missing observations for `exposure'; skipping."
+			continue
+		}
+
+		***Failsafe if exposure-specific sample has no failures
+		quietly count if !missing(`exposure') & _d == 1
+		if r(N) == 0 {
+			di as txt "No failures among patients with non-missing `exposure'; skipping."
+			continue
+		}
 
 		****Run univariable model
 		local model_terms i.`exposure' if !missing(`exposure')
@@ -376,12 +399,17 @@ foreach outcome of local outcomes {
 			local ++i
 		}
 		
+		*****Naming of graphs
+		local graphstub = substr("`exposure'_`outcome'", 1, 25)
+		local kmname "km_`graphstub'"
+		local loglogname "ll_`graphstub'"
+		
 		*****Survival plot
-		sts graph if !missing(`exposure'), by(`exposure') survival `km_plotopts' ytitle("Survival probability", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(km_`exposure'_`outcome', replace) saving("$projectdir/output/figures/km_`exposure'_`outcome'.gph", replace)
+		sts graph if !missing(`exposure'), by(`exposure') survival `km_plotopts' ytitle("Survival probability", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(`kmname', replace) saving("$projectdir/output/figures/km_`exposure'_`outcome'.gph", replace)
 		graph export "$projectdir/output/figures/km_`exposure'_`outcome'.$img", replace
 		
 		*****Log-log plot
-		stphplot if !missing(`exposure'), by(`exposure') `loglog_plotopts' ytitle("log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(loglog_`exposure'_`outcome', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
+		stphplot if !missing(`exposure'), by(`exposure') `loglog_plotopts' ytitle("log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
 		graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", replace
 	}
 }

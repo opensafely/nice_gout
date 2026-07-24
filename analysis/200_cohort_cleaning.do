@@ -84,7 +84,12 @@ di "$base_year"
 di "$end_year"
 di "$max_year"
 
-*Define max number of sequentially recorded prescriptions for an example drug (same for each drug in dataset definition)
+set scheme plotplainblind
+
+*Import primary dataset
+import delimited "$projectdir/output/dataset_primary.csv", clear
+
+*Define max number of sequentially recorded prescriptions for an example drug (same for each drug in dataset definition) ======================================*/
 local max_prescription = 0
 local first_med: word 1 of $medications
 display "`first_med'"
@@ -99,11 +104,6 @@ if !_rc & "`r(varlist)'" != "" {
 }
 global max_prescription = `max_prescription'
 di "$max_prescription"
-
-set scheme plotplainblind
-
-*Import primary dataset
-import delimited "$projectdir/output/dataset_primary.csv", clear
 
 *Conversion for dates ====================================================*
 
@@ -1433,7 +1433,7 @@ reshape long gout_adm_date_, i(patient_id) j(admission_order)
 drop if missing(gout_adm_date_)
 rename gout_adm_date_ flare_overall_date
 format flare_overall_date %td
-gen flare_source = 1
+gen flare_source = 4
 keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/adm_dates_long.dta", replace
 restore
@@ -1445,7 +1445,7 @@ reshape long gout_ed_date_, i(patient_id) j(emerg_order)
 drop if missing(gout_ed_date_)
 rename gout_ed_date_ flare_overall_date
 format flare_overall_date %td
-gen flare_source = 2
+gen flare_source = 3
 keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/emerg_dates_long.dta", replace
 restore
@@ -1457,7 +1457,7 @@ reshape long flare_date_, i(patient_id) j(flare_order)
 drop if missing(flare_date_)
 rename flare_date_ flare_overall_date
 format flare_overall_date %td
-gen flare_source = 3
+gen flare_source = 2
 keep patient_id ${disease}_inc_date flare_overall_date flare_source
 save "$projectdir/output/data/flare_dates_long.dta", replace
 restore
@@ -1472,6 +1472,7 @@ format code_and_tx_date_ %td
 
 ***Find matching consult and treatment dates
 forvalues i = 1/$max_prescription {
+	display "$max_prescription"
     replace code_and_tx_date_ = gout_cons_date_ if gout_cons_date_ == nsaid_date_`i' & !missing(gout_cons_date_, nsaid_date_`i') 
     replace code_and_tx_drug = 1 if gout_cons_date_ == nsaid_date_`i' & !missing(gout_cons_date_, nsaid_date_`i') 
 	
@@ -1486,7 +1487,7 @@ rename code_and_tx_date_ flare_overall_date
 rename code_and_tx_drug flare_drug
 format flare_overall_date %td
 drop if missing(flare_overall_date)
-gen flare_source = 4
+gen flare_source = 1
 keep patient_id ${disease}_inc_date flare_overall_date flare_drug flare_source
 save "$projectdir/output/data/code_and_tx_dates_long.dta", replace
 
@@ -1498,26 +1499,34 @@ append using "$projectdir/output/data/flare_dates_long.dta"
 **Remove events within first 14 days of diagnosis
 drop if flare_overall_date < (${disease}_inc_date + 14)
 
-**Remove events that occur within 14 days of one another (repeat this until no further events within 14 days of one another)
+**Remove events that occur within 14 days of one another, prioritising flare source
 sort patient_id flare_overall_date flare_source
 local changed 1
+
 while `changed' {
-	by patient_id (flare_overall_date flare_source): gen too_close = _n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & (flare_overall_date - flare_overall_date[_n-1] < 14)
-    by patient_id (flare_overall_date flare_source): gen drop_event = too_close & sum(too_close) == 1
-	*Transfer treatment from the event being dropped to the preceding retained flare episode
-    by patient_id (flare_overall_date flare_source): replace flare_drug = flare_drug[_n+1] if _n < _N & drop_event[_n+1] == 1 & !missing(flare_drug[_n+1]) & (missing(flare_drug) | flare_drug[_n+1] > flare_drug)
-    quietly count if drop_event
+    by patient_id (flare_overall_date flare_source): gen too_close = _n > 1 & !missing(flare_overall_date, flare_overall_date[_n-1]) & flare_overall_date - flare_overall_date[_n-1] < 14
+    by patient_id (flare_overall_date flare_source): gen first_conflict = too_close & sum(too_close) == 1
+    gen drop_event = 0
+
+    *Drop the later event when the preceding event has equal or higher priority
+    by patient_id (flare_overall_date flare_source): replace drop_event = 1 if first_conflict == 1 & flare_source >= flare_source[_n-1]
+
+    *Drop the preceding event when the later event has higher priority
+    by patient_id (flare_overall_date flare_source): replace drop_event = 1 if _n < _N & first_conflict[_n+1] == 1 & flare_source > flare_source[_n+1]
+
+    quietly count if drop_event == 1
     local changed = r(N)
-    drop if drop_event
-    drop too_close drop_event
+
+    drop if drop_event == 1
+    drop too_close first_conflict drop_event
 }
 
 **Define flare source
 label define flare_source ///
-    1 "Admission" ///
-	2 "ED attendance" ///
-	3 "Flare code" ///
-    4 "Consultation plus treatment", replace
+	1 "Consultation plus treatment" ///
+	2 "Flare code" ///
+	3 "ED attendance" ///
+	4 "Admission", replace
 label val flare_source flare_source
 
 **Generate overall flare counts and first post-diagnosis flare date
@@ -1539,15 +1548,30 @@ merge 1:m patient_id using "$projectdir/output/data/flares.dta", keep(master mat
 replace flare_overall_count = 0 if missing(flare_overall_count)
 label variable flare_overall_count "Number of gout flares after diagnosis"
 
-**Flare dates that received colchicine vs. NSAIDs vs. steroids on same day - generated above
-rename flare_drug flare_drug_
+***Identify treatment prescribed on the same day as each retained flare date
+
+****Discard the earlier drug assignment and regenerate it using the final flare date
+drop flare_drug
+gen flare_drug_ = .
+
+****Finding matching prescriptions
+if $max_prescription > 0 {
+    forvalues i = 1/$max_prescription {
+        replace flare_drug_ = 1 if flare_overall_date_ == nsaid_date_`i' & !missing(flare_overall_date_, nsaid_date_`i')
+        replace flare_drug_ = 2 if flare_overall_date_ == colchicine_date_`i' & !missing(flare_overall_date_, colchicine_date_`i')
+        replace flare_drug_ = 3 if flare_overall_date_ == steroid_date_`i' & !missing(flare_overall_date_, steroid_date_`i')
+    }
+}
+
 replace flare_drug_ = 0 if !missing(flare_overall_date_) & missing(flare_drug_)
+
 lab var flare_drug_ "Drug used for treatment of gout flare"
 lab define flare_drug_ 0 "No captured drug" 1 "NSAID" 2 "Colchicine" 3 "Corticosteroid", modify
 lab val flare_drug_ flare_drug_
 
 **Save a long format dta for downstream flare analyses
 preserve
+drop if missing(flare_overall_date_)
 keep patient_id flare_overall_date_ flare_drug_ $demographic flare_source
 save "$projectdir/output/data/flares_long.dta", replace
 restore
@@ -1617,7 +1641,7 @@ if !_rc & "`r(varlist)'" != "" {
 }
 di "`max'"
 
-***Find matching urate levels within 3 months after baseline urate (if baseline <360)
+***Find matching urate levels within 3 months after first non-index flare
 if `max' > 0 {
     forvalues i = 1/`max' {
 	replace post_flare_urate = 1 if first_flare_overall_date!=. & ((urate_date_`i' > first_flare_overall_date) & (urate_date_`i' <= (first_flare_overall_date + 90)) & urate_date_`i'!=.)
