@@ -215,6 +215,12 @@ end
 *Load processed cohort ================================
 use "$projectdir/output/data/cohort_processed.dta", clear
 
+local n_km_graphs = 0
+local n_loglog_graphs = 0
+
+capture erase "$projectdir/output/figures/km_no_outputs.$img"
+capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
+
 *Define key variables for landmark survival analysis ===============================================
 
 **Define cohort entry date
@@ -406,11 +412,19 @@ foreach outcome of local outcomes {
 		
 		*****Survival plot
 		sts graph if !missing(`exposure'), by(`exposure') survival `km_plotopts' ytitle("Survival probability", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(`kmname', replace) saving("$projectdir/output/figures/km_`exposure'_`outcome'.gph", replace)
-		graph export "$projectdir/output/figures/km_`exposure'_`outcome'.$img", replace
+		capture graph export "$projectdir/output/figures/km_`exposure'_`outcome'.$img", replace
+		
+		if _rc == 0 {
+			local ++n_km_graphs
+		}
 		
 		*****Log-log plot
 		stphplot if !missing(`exposure'), by(`exposure') `loglog_plotopts' ytitle("log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
-		graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", replace
+		capture graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", replace
+		
+		if _rc == 0 {
+			local ++n_loglog_graphs
+		}
 	}
 }
 	
@@ -419,11 +433,46 @@ restore
 *Close tempfile
 postclose $cox_measures
 
-*Output postfiles to csv
-use "$projectdir/output/data/landmark_cox_summary.dta", clear
+*Output postfile to csv - with failsafes
+capture use "$projectdir/output/data/landmark_cox_summary.dta", clear
+
+if _rc {
+	clear
+	set obs 0
+	gen str1 outcome = ""
+}
+
 format hazardratio lower95 upper95 %9.3f
 format pvalue %9.4f
 
-export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace datafmt
+export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace
+
+*Create dummy KM graph only if no KM graphs were exported
+if `n_km_graphs' == 0 {
+    preserve
+    clear
+    set obs 1
+    gen x = 1
+    gen y = 1
+
+    twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("No Kaplan-Meier estimates available") legend(off)
+
+    graph export "$projectdir/output/figures/km_no_outputs.$img", replace
+    restore
+}
+
+*Create dummy log-log graph only if no log-log graphs were exported
+if `n_loglog_graphs' == 0 {
+    preserve
+    clear
+    set obs 1
+    gen x = 1
+    gen y = 1
+
+    twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("No log-log estimates available") legend(off)
+
+    graph export "$projectdir/output/figures/loglog_no_outputs.$img", replace
+    restore
+}
 
 log close
