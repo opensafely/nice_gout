@@ -485,8 +485,7 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 			***Skip outcome if no observed proportions remain
 			quietly count if !missing(prop, month_year)
 			if r(N) == 0 {
-				di as text "Skipping `table' / `outcome': no observed proportions"
-				restore
+				di as text "Skipping `table' / `outcome' / `demog_var': no observed proportions"
 				continue
 			}
 				
@@ -1097,7 +1096,6 @@ foreach table in postdiagnosis {
 		quietly count if !missing(prop, month_year)
 		if r(N) == 0 {
 			di as text "Skipping `table' / `outcome': no observed proportions"
-			restore
 			continue
 		}
 		
@@ -1262,7 +1260,6 @@ foreach table in postult {
 		quietly count if !missing(prop, month_year)
 		if r(N) == 0 {
 			di as text "Skipping `table' / `outcome': no observed proportions"
-			restore
 			continue
 		}
 		
@@ -1437,7 +1434,14 @@ foreach table in ult_drug flares {
 
 	***Change to %
 	replace prop = prop*100
-			
+	
+	***Skip table if no usable proportions remain
+	quietly count if !missing(prop, month_year)
+	if r(N) == 0 {
+		di as text "Skipping `table': no observed proportions"
+		continue
+	}
+				
 	***Generate 3-monthly moving averages for proportions
 	bysort outcome_name outcome_desc (month_year): gen prop_ma = (prop[_n-1] + prop[_n] + prop[_n+1])/3
 
