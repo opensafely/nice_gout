@@ -1,6 +1,6 @@
 user/markdrussell/gout/75b2996a/
 user/markdrussell/gout-prevalent/4393b300/
-user/markdrussell/gout-admissions/07a7df6d/
+user/markdrussell/gout-admissions/296966be/
 user/markdrussell/gouty-tophi/1174cc96/
 user/markdrussell/gout-flaresattacks/78655960/
 user/markdrussell/gout-chronic-arthritis/14278c8c/
@@ -10,16 +10,16 @@ nhsd-primary-care-domain-refsets/cre_cod/48c03197
 nhsd-primary-care-domain-refsets/chol2_cod/3458f3bc
 nhsd-primary-care-domain-refsets/ifcchbam_cod/00aca634
 
-user/markdrussell/allopurinol-dmd/2fe9bfb7/
-user/markdrussell/allopurinol-300mg-doses-dmd/3234fcce/
+user/markdrussell/allopurinol-dmd/2c7acbfd/
+user/markdrussell/allopurinol-300mg-doses-dmd/7a5be592/
 user/markdrussell/febuxostat-dmd/7dcad94c/
 user/markdrussell/febuxostat-120mg-doses-dmd/00161664/
 user/markdrussell/benzbromarone-dmd/4babf2e2/
 user/markdrussell/probenecid-dmd/198d0c78/
-user/markdrussell/colchicine-dmd/676e260d/
+user/markdrussell/colchicine-dmd/161e18be/
 nhs-drug-refsets/c19corstedrug_cod/41d73ef1
 nhs-drug-refsets/oralnsaiddrug_cod/004e8c52
-user/markdrussell/diuretics-dmd/511172ce
+user/markdrussell/diuretics-dmd/63ff3253
 nhs-drug-refsets/sglt2idrug_cod/3a85b29e
 nhs-drug-refsets/ace_cod/04ed58af
 nhs-drug-refsets/aii_cod/4b7ce5f1
@@ -37,6 +37,7 @@ nhsd-primary-care-domain-refsets/cldatrisk1_cod/394cfc65
 nhsd-primary-care-domain-refsets/orgtransp_cod/1cd6e7a5
 nhsd-primary-care-domain-refsets/excessalc_cod/06cf70b2
 nhsd-primary-care-domain-refsets/hyp_cod/521a90af
+user/markdrussell/inguinal-hernia/18d0d8b4
 
 opensafely/smoking-clear/2020-04-29
 

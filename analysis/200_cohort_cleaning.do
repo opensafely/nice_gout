@@ -53,12 +53,12 @@ if $running_locally ==1 {
 	global studyfup_date "2026-06-30"
 	global nice_date "2022-06-01"
 	global demographic "agegroup sex ethnicity imd region"
-	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
+	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol hernia"
 	global disease_features "tophi chronic_gout"
 	global events "flare"
 	global admissions "gout"
 	global bloods "urate creatinine cholesterol hba1c"
-	global medications "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
+	global medications "ult allopurinol allopurinol_high febuxostat febuxostat_high colchicine steroid nsaid diuretic sglt2 ace_arb"
 	global outpatients "rheumatology"
 }
 
@@ -405,6 +405,10 @@ lab var transplant_12m "Solid organ transplant"
 lab var alcohol_bl "Excess alcohol"
 lab var alcohol_new "Excess alcohol"
 lab var alcohol_12m "Excess alcohol"
+lab var hernia_bl "Inguinal hernia"
+lab var hernia_new "Inguinal hernia"
+lab var hernia_12m "Inguinal hernia"
+
 
 **Disease-specific features at baseline and after diagnosis (passed from yaml) =================================*/
 
@@ -469,7 +473,7 @@ tab `drug'_year, missing
 
 ***What was the first drug prescribed within a class (amend list as necessary)
 gen str40 `drug'_first_d="" if `drug'_first_date!=.
-foreach var of varlist allopurinol_first_date febuxostat_first_date benzbromarone_first_date probenecid_first_date {
+foreach var of varlist allopurinol_first_date febuxostat_first_date {
 	replace `drug'_first_d="`var'" if `drug'_first_date==`var' & `drug'_first_date!=. & `var'!=.
 	}
 gen str40  `drug'_first_drug_s = strproper(substr(`drug'_first_d, 1, strpos(`drug'_first_d, "_") - 1)) if `drug'_first_d!=""  
@@ -539,7 +543,7 @@ foreach tx in colchicine nsaid steroid {
 }
 
 ***Loop through drugs of interest
-foreach med in `drug' allopurinol febuxostat benzbromarone probenecid  {
+foreach med in `drug' allopurinol febuxostat {
 	
 	if "`med'" == "`drug'" {
 		local druglabel = "`Drug'" 
@@ -1885,6 +1889,31 @@ label def ckd_free_landmark 0 "No" 1 "Yes"
 label val ckd_free_landmark ckd_free_landmark
 label var ckd_free_landmark "No evidence of CKD at ULT landmark"
 
+**Hernia (negative control)
+
+**Hernia status with relation to ULT initiation date
+gen hernia_pre_ult = 0
+replace hernia_pre_ult = 1 if (hernia_date <= ult_first_date) & hernia_date !=. & ult_first_date !=.
+replace hernia_pre_ult =. if ult_first_date ==.
+label def hernia_pre_ult 0 "No" 1 "Yes"
+label val hernia_pre_ult hernia_pre_ult
+label var hernia_pre_ult "Evidence of inguinal hernia at or before ULT initiation"
+
+gen hernia_free_ult = 0
+replace hernia_free_ult = 1 if ((hernia_date > ult_first_date) & hernia_date !=. & ult_first_date !=.) | hernia_date ==.
+replace hernia_free_ult =. if ult_first_date ==.
+label def hernia_free_ult 0 "No" 1 "Yes"
+label val hernia_free_ult hernia_free_ult
+label var hernia_free_ult "No evidence of inguinal hernia at ULT initiation"
+
+**Hernia status at the landmark
+gen hernia_free_landmark = 0
+replace hernia_free_landmark = 1 if ((hernia_date > ult_landmark) & hernia_date !=. & ult_landmark !=.) | hernia_date ==.
+replace hernia_free_landmark =. if ult_landmark ==.
+label def hernia_free_landmark 0 "No" 1 "Yes"
+label val hernia_free_landmark hernia_free_landmark
+label var hernia_free_landmark "No evidence of inguinal hernia at or before ULT landmark"
+
 **Covariates with relation to landmark date
 
 ***Age at landmark
@@ -1917,6 +1946,7 @@ lab var cva_land "Stroke/TIA at or before landmark"
 lab var liver_disease_land "Chronic liver disease at or before landmark"
 lab var transplant_land "Solid organ transplant at or before landmark"
 lab var alcohol_land "Excess alcohol at or before landmark"
+lab var hernia_land "Inguinal hernia at or before landmark"
 
 ***Drugs at landmark (prescriptions within 6 months before)
 foreach drug in diuretic sglt2 ace_arb {

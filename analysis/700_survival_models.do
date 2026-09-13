@@ -791,8 +791,8 @@ local exposure_sens_300 urate_300_12m_ult
 local exposure_sens_300_360 urate_targets_12m_ult
 
 **Define exposure list to loop through
-local exposures `exposure_primary_360' 
-*`exposure_sens_codemiss' `exposure_sens_nomiss' `exposure_sens_300' `exposure_sens_300_360'
+local exposures `exposure_primary_360' `exposure_sens_nomiss'
+*`exposure_sens_codemiss' `exposure_sens_300' `exposure_sens_300_360'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
@@ -813,9 +813,14 @@ gen death_land_date = date_of_death if date_of_death > `landmark_date' & !missin
 format death_land_date %td
 label var death_land_date "All-cause mortality after ULT landmark"
 
+**Hernia (negative control) outcome
+gen hernia_land_date = hernia_date if hernia_date > `landmark_date' & !missing(hernia_date) & !missing(`landmark_date')
+
+format hernia_land_date %td
+label var hernia_land_date "Incident inguinal hernia after ULT landmark"
+
 **Define outcome list to loop through
-local outcomes sec_ckd_egfr_land_date death_land_date 
-*first_ckd_egfr_land_date first_ckd_code_land_date
+local outcomes sec_ckd_egfr_land_date first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -898,8 +903,19 @@ keep if !missing(`landmark_date') & !missing(censor_date) & (censor_date > `land
 keep if `outcome_free_baseline' ==1 //outcome not present before cohort entry
 keep if `outcome_free_landmark' ==1 //outcome not present before landmark
 
+**Save common cohort so each outcome starts with the same patients
+tempfile landmark_cohort
+quietly save `landmark_cohort'
+
 **Loop through outcomes
 foreach outcome of local outcomes {
+	
+	quietly use `landmark_cohort', clear
+	
+	**Exclude previous hernia only for the incident hernia analysis
+    if "`outcome'" == "hernia_land_date" {
+        keep if hernia_free_landmark == 1
+    }
 	
 	di as txt "Outcome = `outcome'"
 			
@@ -1100,7 +1116,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-		
+/*		
 		****Run multiply imputed models
 		
 		**Temporarily save current analysis dataset
@@ -1146,6 +1162,7 @@ foreach outcome of local outcomes {
 		
 		**Restore dataset before MI
 		quietly use `pre_mi', clear
+*/		
 	}
 }
 	

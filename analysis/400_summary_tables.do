@@ -47,12 +47,12 @@ if $running_locally ==1 {
 	global studystart_date "2016-07-01"
 	global studyend_date "2025-06-30"
 	global studyfup_date "2026-06-30"
-	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
+	global comorbidities "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol hernia"
 	global disease_features "tophi chronic_gout"
 	global events "flare"
 	global admissions "gout"
 	global bloods "urate creatinine cholesterol hba1c"
-	global medications "ult allopurinol febuxostat benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
+	global medications "ult allopurinol febuxostat colchicine steroid nsaid diuretic sglt2 ace_arb"
 	global outpatients "rheumatology"
 }
 
@@ -265,7 +265,7 @@ foreach t in 12 {
 	keep if has_`t'm_fup_ult==1
 
 	**Process catergorical outcomes of interest
-	foreach outcome of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult has_`t'm_fup_target {
+	foreach outcome of varlist febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm urate_`t'm_ult_recode urate_`t'm_ult_cat two_urate_`t'm_ult urate_within_`t'm_ult has_`t'm_fup_target {
 		rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`t'm`cohort'.dta")
 	}
 
