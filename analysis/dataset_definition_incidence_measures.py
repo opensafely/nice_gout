@@ -20,7 +20,7 @@ interval_end = INTERVAL.end_date
 
 # Currently registered with a practice
 curr_registered = practice_registrations.for_patient_on(interval_start).exists_for_patient()
-region_curr = curr_registered(interval_start).practice_nuts1_region_name
+region_curr = practice_registrations.for_patient_on(interval_start).practice_nuts1_region_name
 
 # Registration for at least 12 months before index date
 preceding_reg_int = preceding_registration(interval_start).exists_for_patient()
