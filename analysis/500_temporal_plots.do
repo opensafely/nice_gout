@@ -701,6 +701,14 @@ foreach table in febux_mace {
 		**Keep full cohort only
 		keep if demog_group == "all"
 		
+		**Skip outcomes with no usable proportions or dates
+		quietly count if !missing(prop, month_year)
+		if r(N) == 0 {
+			di as text "Skipping `table' / `outcome': no observed proportions"
+			restore
+			continue
+		}
+		
 		**Format numeric year as a Stata annual date
 		format month_year %ty
 		order month_year, after(outcome_desc)
