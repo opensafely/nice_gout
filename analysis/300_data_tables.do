@@ -437,10 +437,10 @@ foreach t in 12 {
     local time_variable "ult_first_date_my"
 
     **Define all outcomes
-    local main_outcomes febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
+    local main_outcomes febuxostat_ongoing_`t'm allopurinol_ongoing_`t'm ult_ongoing_`t'm urate_`t'm_ult_recode urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
 
     **Define outcomes requiring demographic breakdowns
-    local demog_outcomes ult_ongoing_`t'm urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
+    local demog_outcomes ult_ongoing_`t'm urate_`t'm_ult_recode urate_`t'm_ult two_urate_`t'm_ult urate_within_`t'm_ult
 
     **Generate full-cohort results
     tempfile full_results

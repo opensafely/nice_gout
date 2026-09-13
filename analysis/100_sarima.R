@@ -392,7 +392,7 @@ for (j in 1:length(disease_list)) {
         axis.title.y = element_text(size = 11, margin = margin(r = 10, l = 10)), 
         plot.title = element_text(size = 11, hjust = 0.5, face = "plain"))+
       annotate("text", x = intervention_date, y = Inf, label = "COVID-19", vjust = -0.5, hjust = 0.5, size = 3.0, color = "navy")+        
-      coord_cartesian(ylim = c(0, y_lim), clip = "off")+
+      coord_cartesian(ylim = c(0, y_lim), clip = "off")
       #ggtitle(paste("Observed vs. expected", tolower(disease_full), "diagnoses"))
     
     saveRDS(c1, file = paste0("output/figures/sarima_", var, "_", dis, ".rds"))
@@ -556,7 +556,7 @@ for (j in 1:length(disease_list)) {
           axis.title.y = element_text(size = 11, margin = margin(r = 10, l = 10)), 
           plot.title = element_text(size = 11, hjust = 0.5, face = "plain"))+
         annotate("text", x = intervention_date, y = Inf, label = "COVID-19", vjust = -0.5, hjust = 0.5, size = 3.0, color = "navy", inherit.aes = FALSE)+        
-        coord_cartesian(ylim = c(0, y_lim), clip = "off")+
+        coord_cartesian(ylim = c(0, y_lim), clip = "off")
         #ggtitle(paste0(disease_full))
       
       saveRDS(c_prophet, file = paste0("output/figures/prophet_", var, "_", dis, ".rds"))

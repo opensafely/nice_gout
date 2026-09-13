@@ -20,13 +20,14 @@ interval_end = INTERVAL.end_date
 
 # Currently registered with a practice
 curr_registered = practice_registrations.for_patient_on(interval_start).exists_for_patient()
+region_curr = practice_registrations.for_patient_on(interval_start).practice_nuts1_region_name
 
 # Registration for at least 12 months before index date
 preceding_reg_int = preceding_registration(interval_start).exists_for_patient()
 
 # Practice region and pseudoid at interval start
-region_int = preceding_registration(interval_start).practice_nuts1_region_name
-practice_id_int = preceding_registration(interval_start).practice_pseudo_id
+region_preceding = preceding_registration(interval_start).practice_nuts1_region_name
+practice_id_preceding = preceding_registration(interval_start).practice_pseudo_id
 
 # IMD quintile at interval start
 address_per_patient_int = addresses.for_patient_on(interval_start)
@@ -54,7 +55,7 @@ age_band = case(
 )
 
 measures = create_measures()
-measures.configure_dummy_data(population_size=10000, legacy=True)
+measures.configure_dummy_data(population_size=1000, legacy=True)
 measures.configure_disclosure_control(enabled=False)
 measures.define_defaults(intervals=months(intervals).starting_on(measure_start_date))
 
@@ -149,7 +150,7 @@ measures.define_measure(
     numerator=incidence_numerators[disease + "_inc_num"],
     denominator=incidence_denominators[disease + "_inc_denom"],
     group_by={
-        "region": region_int,
+        "region_pre": region_preceding,
     },
 )
 
@@ -191,6 +192,6 @@ measures.define_measure(
     numerator=prev_numerators[disease + "_prev_num"],
     denominator=prev_denominator,
     group_by={
-        "region": region_int,
+        "region_cur": region_curr,
     },
 )

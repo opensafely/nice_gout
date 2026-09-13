@@ -13,10 +13,10 @@
       "sha": "546bbbea680fe0500439ae71d90f17a9d18781d5"
     },
     "user-markdrussell-gout-admissions.csv": {
-      "id": "user/markdrussell/gout-admissions/07a7df6d",
-      "url": "https://www.opencodelists.org/codelist/user/markdrussell/gout-admissions/07a7df6d/",
-      "downloaded_at": "2025-09-26 13:02:17.368522Z",
-      "sha": "b4f8a262fc4324281ddc145e05a93a4bb7f2197c"
+      "id": "user/markdrussell/gout-admissions/296966be",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/gout-admissions/296966be/",
+      "downloaded_at": "2026-09-09 15:26:05.058353Z",
+      "sha": "8f611733344502a6ad0af99f5fae01ffabdc9c07"
     },
     "user-markdrussell-gouty-tophi.csv": {
       "id": "user/markdrussell/gouty-tophi/1174cc96",
@@ -61,16 +61,16 @@
       "sha": "e4b05d5290a5ed002046eb9d27bb7e62b994c4f6"
     },
     "user-markdrussell-allopurinol-dmd.csv": {
-      "id": "user/markdrussell/allopurinol-dmd/2fe9bfb7",
-      "url": "https://www.opencodelists.org/codelist/user/markdrussell/allopurinol-dmd/2fe9bfb7/",
-      "downloaded_at": "2025-10-06 14:04:28.050673Z",
-      "sha": "ce67d314052177f460a6c6d6f7e057a8bf845404"
+      "id": "user/markdrussell/allopurinol-dmd/2c7acbfd",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/allopurinol-dmd/2c7acbfd/",
+      "downloaded_at": "2026-09-13 18:40:44.180790Z",
+      "sha": "61da170b36b6230d59439ade2c3e0aae3d5e5ef2"
     },
     "user-markdrussell-allopurinol-300mg-doses-dmd.csv": {
-      "id": "user/markdrussell/allopurinol-300mg-doses-dmd/3234fcce",
-      "url": "https://www.opencodelists.org/codelist/user/markdrussell/allopurinol-300mg-doses-dmd/3234fcce/",
-      "downloaded_at": "2026-03-05 13:26:04.814614Z",
-      "sha": "b4498979ddcf5455e72ba277638751dc4ddac57e"
+      "id": "user/markdrussell/allopurinol-300mg-doses-dmd/7a5be592",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/allopurinol-300mg-doses-dmd/7a5be592/",
+      "downloaded_at": "2026-09-13 18:40:44.498532Z",
+      "sha": "f2b57ff7caf517c84c76a15064c7a0abbaa81345"
     },
     "user-markdrussell-febuxostat-dmd.csv": {
       "id": "user/markdrussell/febuxostat-dmd/7dcad94c",
@@ -97,10 +97,10 @@
       "sha": "cbf74ba63e03a61756a2726e1aeb201c6fe490cf"
     },
     "user-markdrussell-colchicine-dmd.csv": {
-      "id": "user/markdrussell/colchicine-dmd/676e260d",
-      "url": "https://www.opencodelists.org/codelist/user/markdrussell/colchicine-dmd/676e260d/",
-      "downloaded_at": "2025-10-06 14:07:16.877278Z",
-      "sha": "e551aa7f931253ab47058cc6e9e67a0fb5466f75"
+      "id": "user/markdrussell/colchicine-dmd/161e18be",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/colchicine-dmd/161e18be/",
+      "downloaded_at": "2026-09-13 18:40:45.159773Z",
+      "sha": "c92192dd69ef1357ea185811885e42acad5a0d20"
     },
     "nhs-drug-refsets-c19corstedrug_cod.csv": {
       "id": "nhs-drug-refsets/c19corstedrug_cod/41d73ef1",
@@ -115,10 +115,10 @@
       "sha": "4b05ec8aa0197e2f134fdd40c7518c73f8681e8d"
     },
     "user-markdrussell-diuretics-dmd.csv": {
-      "id": "user/markdrussell/diuretics-dmd/511172ce",
-      "url": "https://www.opencodelists.org/codelist/user/markdrussell/diuretics-dmd/511172ce/",
-      "downloaded_at": "2025-10-06 14:09:24.510065Z",
-      "sha": "a7f3b3c00b74cfd27f12565d7d6576aed7cc7fbf"
+      "id": "user/markdrussell/diuretics-dmd/63ff3253",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/diuretics-dmd/63ff3253/",
+      "downloaded_at": "2026-09-13 18:40:45.680070Z",
+      "sha": "9943b987e56b58bfe47ff631bba53908f442e34d"
     },
     "nhs-drug-refsets-sglt2idrug_cod.csv": {
       "id": "nhs-drug-refsets/sglt2idrug_cod/3a85b29e",
@@ -209,6 +209,12 @@
       "url": "https://www.opencodelists.org/codelist/nhsd-primary-care-domain-refsets/hyp_cod/521a90af/",
       "downloaded_at": "2026-05-08 11:38:16.222358Z",
       "sha": "f94870510a3550ff79710b2d88b551812bb2fb3b"
+    },
+    "user-markdrussell-inguinal-hernia.csv": {
+      "id": "user/markdrussell/inguinal-hernia/18d0d8b4",
+      "url": "https://www.opencodelists.org/codelist/user/markdrussell/inguinal-hernia/18d0d8b4/",
+      "downloaded_at": "2026-09-13 19:18:11.479756Z",
+      "sha": "456fbb72e0d5dbfb2ba6f4ab5d989e431e3061ac"
     },
     "opensafely-smoking-clear.csv": {
       "id": "opensafely/smoking-clear/2020-04-29",

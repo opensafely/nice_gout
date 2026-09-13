@@ -145,6 +145,14 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 		***Restrict data to study end
 		keep if inrange(month_year, $studystart, $studyend)
 		
+		***Skip outcome if no observed proportions remain
+		quietly count if !missing(prop, month_year)
+		if r(N) == 0 {
+			di as text "Skipping `table' / `outcome': no observed proportions"
+			restore
+			continue
+		}
+		
 		**Generate 3-monthly moving averages for proportions
 		sort month_year
 		gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
@@ -473,6 +481,13 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 			
 			***Restrict data to study end
 			keep if inrange(month_year, $studystart, $studyend)
+			
+			***Skip outcome if no observed proportions remain
+			quietly count if !missing(prop, month_year)
+			if r(N) == 0 {
+				di as text "Skipping `table' / `outcome' / `demog_var': no observed proportions"
+				continue
+			}
 				
 			***Generate 3-monthly moving averages for proportions
 			bys demog_level (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
@@ -685,6 +700,14 @@ foreach table in febux_mace {
 		**Keep full cohort only
 		keep if demog_group == "all"
 		
+		**Skip outcomes with no usable proportions or dates
+		quietly count if !missing(prop, month_year)
+		if r(N) == 0 {
+			di as text "Skipping `table' / `outcome': no observed proportions"
+			restore
+			continue
+		}
+		
 		**Format numeric year as a Stata annual date
 		format month_year %ty
 		order month_year, after(outcome_desc)
@@ -841,6 +864,14 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 
 			***Restrict data to study end
 			keep if inrange(month_year, $studystart, $studyend)
+			
+			***Skip outcome if no observed proportions remain
+			quietly count if !missing(prop, month_year)
+			if r(N) == 0 {
+				di as text "Skipping `table' / `outcome': no observed proportions"
+				restore
+				continue
+			}
 
 			***Generate year (from July to June)
 			gen year = year(dofm(month_year)) - (month(dofm(month_year)) < 7)
@@ -1061,6 +1092,13 @@ foreach table in postdiagnosis {
 		***Restrict data to study end
 		keep if inrange(month_year, $studystart, $studyend)
 		
+		***Skip outcome if no observed proportions remain
+		quietly count if !missing(prop, month_year)
+		if r(N) == 0 {
+			di as text "Skipping `table' / `outcome': no observed proportions"
+			continue
+		}
+		
 		**Generate 3-monthly moving averages for proportions
 		sort month_year
 		bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
@@ -1218,6 +1256,13 @@ foreach table in postult {
 		***Restrict data to study end
 		keep if inrange(month_year, $studystart, $studyend)
 		
+		***Skip outcome if no observed proportions remain
+		quietly count if !missing(prop, month_year)
+		if r(N) == 0 {
+			di as text "Skipping `table' / `outcome': no observed proportions"
+			continue
+		}
+		
 		**Generate 3-monthly moving averages for proportions
 		sort month_year
 		bys outcome_name (month_year): gen prop_ma = (prop[_n-1]+prop[_n]+prop[_n+1])/3
@@ -1352,6 +1397,14 @@ foreach table in ult_drug flares {
 	***Restrict data to study end
 	keep if inrange(month_year, $studystart, $studyend)
 	
+	***Skip outcome if no observed proportions remain
+	quietly count if !missing(prop, month_year)
+	if r(N) == 0 {
+		di as text "Skipping `table' / `outcome': no observed proportions"
+		restore
+		continue
+	}
+	
 	**Reshape to long format
 	reshape long count_ total_ prop_, i(month_year outcome_name outcome_desc) j(demographic) string
 	gen demog_group = substr(demographic, 1, 3)
@@ -1381,7 +1434,14 @@ foreach table in ult_drug flares {
 
 	***Change to %
 	replace prop = prop*100
-			
+	
+	***Skip table if no usable proportions remain
+	quietly count if !missing(prop, month_year)
+	if r(N) == 0 {
+		di as text "Skipping `table': no observed proportions"
+		continue
+	}
+				
 	***Generate 3-monthly moving averages for proportions
 	bysort outcome_name outcome_desc (month_year): gen prop_ma = (prop[_n-1] + prop[_n] + prop[_n+1])/3
 

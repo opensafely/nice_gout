@@ -23,12 +23,12 @@ actions:
       --studyfup_date "2026-06-30"
       --primary_disease gout
       --diseases_list gout
-      --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol
+      --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol hernia
       --disease_features_list tophi chronic_gout
       --events_list flare
       --admissions_list gout
       --bloods_list urate creatinine cholesterol hba1c
-      --medications_list ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb
+      --medications_list ult allopurinol allopurinol_high febuxostat febuxostat_high colchicine steroid nsaid diuretic sglt2 ace_arb
       --outpatients_list rheumatology
     needs: [generate_dataset_incidence]
     outputs:
@@ -43,7 +43,7 @@ actions:
       --studyend_date "2025-06-30"
       --studyfup_date "2026-06-30"
       --bloods_list urate creatinine cholesterol hba1c
-      --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol
+      --comorbidities_list chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol hernia
     outputs:
       highly_sensitive:
         cohort: output/dataset_incidence_ref.csv                     
@@ -211,7 +211,7 @@ actions:
         figure2: output/figures/prev_*.svg
 
   sarima:
-    run: r:v2 analysis/100_sarima.R "2020-03-01"
+    run: r:v3 analysis/100_sarima.R "2020-03-01"
     needs: [incidence_graphs]
     outputs:
       moderately_sensitive:
@@ -237,7 +237,7 @@ actions:
         measure_csv: output/measures/measures_practice_gout.csv
 
   cohort_cleaning:
-    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
+    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [generate_dataset_primary, measures_practice_gout]
     outputs:
       highly_sensitive:
@@ -246,7 +246,7 @@ actions:
         data2: output/data/flares_long.dta
 
   cohort_cleaning_ref:
-    run: stata-mp:latest analysis/201_reference_cleaning.do "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "urate|creatinine|cholesterol|hba1c"
+    run: stata-mp:latest analysis/201_reference_cleaning.do "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
     needs: [generate_dataset_reference]
     outputs:
       highly_sensitive:
@@ -262,7 +262,7 @@ actions:
         table1: output/tables/data_table_*.csv
 
   summary_tables:
-    run: stata-mp:latest analysis/400_summary_tables.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|benzbromarone|probenecid|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
+    run: stata-mp:latest analysis/400_summary_tables.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -270,7 +270,7 @@ actions:
         table1: output/tables/summary_table_*.csv
 
   summary_tables_ref:
-    run: stata-mp:latest analysis/401_summary_tables_ref.do "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol" "urate|creatinine|cholesterol|hba1c"
+    run: stata-mp:latest analysis/401_summary_tables_ref.do "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
     needs: [cohort_cleaning_ref]
     outputs:
       moderately_sensitive:

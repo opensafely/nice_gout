@@ -4,12 +4,12 @@ from datetime import datetime, date
 primary_disease = "gout"
 comparison_diseases = ""
 demographic = "agegroup sex ethnicity imd region"
-comorbidities = "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol"
+comorbidities = "chd diabetes cva ckd hypertension depression heart_failure liver_disease transplant alcohol hernia"
 disease_features = "tophi chronic_gout"
 events = "flare"
 admissions = "gout"
 bloods = "urate creatinine cholesterol hba1c"
-medications = "ult allopurinol allopurinol_high febuxostat febuxostat_high benzbromarone probenecid colchicine steroid nsaid diuretic sglt2 ace_arb"
+medications = "ult allopurinol allopurinol_high febuxostat febuxostat_high colchicine steroid nsaid diuretic sglt2 ace_arb"
 outpatients = "rheumatology"
 
 # Define study period dates
@@ -183,7 +183,7 @@ if incidence == "yes":
         figure2: output/figures/prev_*.svg
 
   sarima:
-    run: r:v2 analysis/100_sarima.R "{intervention_date_1}"
+    run: r:v3 analysis/100_sarima.R "{intervention_date_1}"
     needs: [incidence_graphs]
     outputs:
       moderately_sensitive:

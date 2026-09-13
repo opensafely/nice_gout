@@ -1,9 +1,79 @@
 code,term
 M10,Gout
 M100,Idiopathic gout
+M1000,Idiopathic gout : Multiple sites
+M1001,Idiopathic gout : Shoulder region
+M1002,Idiopathic gout : Upper arm
+M1003,Idiopathic gout : Forearm
+M1004,Idiopathic gout : Hand
+M1005,Idiopathic gout : Pelvic region and thigh
+M1006,Idiopathic gout : Lower leg
+M1007,Idiopathic gout : Ankle and foot
+M1008,Idiopathic gout : Other
+M1009,Idiopathic gout : Site unspecified
 M101,Lead-induced gout
+M1010,Lead-induced gout : Multiple sites
+M1011,Lead-induced gout : Shoulder region
+M1012,Lead-induced gout : Upper arm
+M1013,Lead-induced gout : Forearm
+M1014,Lead-induced gout : Hand
+M1015,Lead-induced gout : Pelvic region and thigh
+M1016,Lead-induced gout : Lower leg
+M1017,Lead-induced gout : Ankle and foot
+M1018,Lead-induced gout : Other
+M1019,Lead-induced gout : Site unspecified
 M102,Drug-induced gout
+M1020,Drug-induced gout : Multiple sites
+M1021,Drug-induced gout : Shoulder region
+M1022,Drug-induced gout : Upper arm
+M1023,Drug-induced gout : Forearm
+M1024,Drug-induced gout : Hand
+M1025,Drug-induced gout : Pelvic region and thigh
+M1026,Drug-induced gout : Lower leg
+M1027,Drug-induced gout : Ankle and foot
+M1028,Drug-induced gout : Other
+M1029,Drug-induced gout : Site unspecified
 M103,Gout due to impairment of renal function
+M1030,Gout due to impairment of renal function : Multiple sites
+M1031,Gout due to impairment of renal function : Shoulder region
+M1032,Gout due to impairment of renal function : Upper arm
+M1033,Gout due to impairment of renal function : Forearm
+M1034,Gout due to impairment of renal function : Hand
+M1035,Gout due to impairment of renal function : Pelvic region and thigh
+M1036,Gout due to impairment of renal function : Lower leg
+M1037,Gout due to impairment of renal function : Ankle and foot
+M1038,Gout due to impairment of renal function : Other
+M1039,Gout due to impairment of renal function : Site unspecified
 M104,Other secondary gout
+M1040,Other secondary gout : Multiple sites
+M1041,Other secondary gout : Shoulder region
+M1042,Other secondary gout : Upper arm
+M1043,Other secondary gout : Forearm
+M1044,Other secondary gout : Hand
+M1045,Other secondary gout : Pelvic region and thigh
+M1046,Other secondary gout : Lower leg
+M1047,Other secondary gout : Ankle and foot
+M1048,Other secondary gout : Other
+M1049,Other secondary gout : Site unspecified
 M109,"Gout, unspecified"
+M1090,"Gout, unspecified : Multiple sites"
+M1091,"Gout, unspecified : Shoulder region"
+M1092,"Gout, unspecified : Upper arm"
+M1093,"Gout, unspecified : Forearm"
+M1094,"Gout, unspecified : Hand"
+M1095,"Gout, unspecified : Pelvic region and thigh"
+M1096,"Gout, unspecified : Lower leg"
+M1097,"Gout, unspecified : Ankle and foot"
+M1098,"Gout, unspecified : Other"
+M1099,"Gout, unspecified : Site unspecified"
 M140,Gouty arthropathy due to enzyme defects and other inherited disorders
+M1400,Gouty arthropathy due to enzyme defects and other inherited disorders : Multiple sites
+M1401,Gouty arthropathy due to enzyme defects and other inherited disorders : Shoulder region
+M1402,Gouty arthropathy due to enzyme defects and other inherited disorders : Upper arm
+M1403,Gouty arthropathy due to enzyme defects and other inherited disorders : Forearm
+M1404,Gouty arthropathy due to enzyme defects and other inherited disorders : Hand
+M1405,Gouty arthropathy due to enzyme defects and other inherited disorders : Pelvic region and thigh
+M1406,Gouty arthropathy due to enzyme defects and other inherited disorders : Lower leg
+M1407,Gouty arthropathy due to enzyme defects and other inherited disorders : Ankle and foot
+M1408,Gouty arthropathy due to enzyme defects and other inherited disorders : Other
+M1409,Gouty arthropathy due to enzyme defects and other inherited disorders : Site unspecified

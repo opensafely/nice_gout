@@ -132,6 +132,11 @@ recode measure_inc_region .=0
 gen measure_prev_region = 1 if substr(measure,-11,.) == "prev_region"
 recode measure_prev_region .=0
 
+**Combine incidence and prevalence region columns
+gen str50 region = ""
+replace region = region_pre if measure_inc_region == 1
+replace region = region_cur if measure_prev_region == 1
+
 **Code any incidence and prevalence measures
 gen measure_inc_any = 1 if measure_inc ==1 | measure_inc_imd==1 | measure_inc_ethnicity==1 | measure_inc_region==1
 recode measure_inc_any .=0

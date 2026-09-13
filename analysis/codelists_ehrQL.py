@@ -74,6 +74,10 @@ hypertension_codes = codelist_from_csv(
     "codelists/nhsd-primary-care-domain-refsets-hyp_cod.csv", column="code",
 )
 
+hernia_codes = codelist_from_csv(
+    "codelists/user-markdrussell-inguinal-hernia.csv", column="code",
+)
+
 # BMI and smoking status
 bmi_codes = ["60621009", "846931000000101"]
 
@@ -134,16 +138,8 @@ febuxostat_high_codes = codelist_from_csv(
     "codelists/user-markdrussell-febuxostat-120mg-doses-dmd.csv", column="code"
 )
 
-benzbromarone_codes = codelist_from_csv(       
-    "codelists/user-markdrussell-benzbromarone-dmd.csv", column="code"
-)
-
-probenecid_codes = codelist_from_csv(       
-    "codelists/user-markdrussell-probenecid-dmd.csv", column="code"
-)
-
 ult_codes = (
-    allopurinol_codes + febuxostat_codes + benzbromarone_codes + probenecid_codes
+    allopurinol_codes + febuxostat_codes
 )
 
 colchicine_codes = codelist_from_csv(       
