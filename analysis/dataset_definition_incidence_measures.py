@@ -150,7 +150,7 @@ measures.define_measure(
     numerator=incidence_numerators[disease + "_inc_num"],
     denominator=incidence_denominators[disease + "_inc_denom"],
     group_by={
-        "region": region_preceding,
+        "region_pre": region_preceding,
     },
 )
 
@@ -192,6 +192,6 @@ measures.define_measure(
     numerator=prev_numerators[disease + "_prev_num"],
     denominator=prev_denominator,
     group_by={
-        "region": region_curr,
+        "region_cur": region_curr,
     },
 )
