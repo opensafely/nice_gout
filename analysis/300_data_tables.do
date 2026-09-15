@@ -361,10 +361,10 @@ format ult_first_date_my %tmMon-CCYY
 local time_variable "ult_first_date_my"
 
 **Define all outcomes
-local main_outcomes ult_high ult_prophylaxis
+local main_outcomes ult_high ult_prophylaxis ult_prophylaxis_3m
 
 **Define outcomes requiring demographic breakdowns
-local demog_outcomes ult_high ult_prophylaxis
+local demog_outcomes ult_high ult_prophylaxis ult_prophylaxis_3m
 
 **Generate full-cohort results
 tempfile full_results
