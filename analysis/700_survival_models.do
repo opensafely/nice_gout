@@ -995,6 +995,7 @@ foreach outcome of local outcomes {
 		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"'
 
+		/*
 		****Run Fine-Gray competing-risk models
 		
 		if "`outcome'" != "death_land_date" {
@@ -1005,6 +1006,7 @@ foreach outcome of local outcomes {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
 			competing_risk_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
 		}
+		*/
 		
 		****Output KM and loglog plots
 		

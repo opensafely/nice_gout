@@ -559,35 +559,41 @@ foreach med in `drug' allopurinol febuxostat {
 	lab define `med'_ever 0 "No" 1 "Yes", replace
 	lab val `med'_ever `med'_ever
 		
-	***Was prophylaxis prescribed on same day at first ULT drug - Nb. restricted to first initiation of each ULT drug
-	gen `med'_prophylaxis = 0 if `med'_first_date !=.
-	gen `med'_prophylaxis_2 = 0 if `med'_first_date !=.
-	
+		***Was prophylaxis prescribed on same day at first ULT drug - Nb. restricted to first initiation of each ULT drug
+	gen `med'_prophylaxis = 0 if !missing(`med'_first_date)
+	gen `med'_prophylaxis_3m = 0 if !missing(`med'_first_date)
+
 	foreach tx in colchicine nsaid steroid {
+
+		tempvar same_day follow_up
+		gen `same_day' = 0
+		gen `follow_up' = 0
 
 		forvalues i = 1/`max_`tx'' {
 
-		****Same-day prophylaxis
-        replace `med'_prophylaxis = 1 if `med'_prophylaxis == 0 & !missing(`med'_first_date, `tx'_date_`i') & `med'_first_date == `tx'_date_`i'
-			
-		****Prophylaxis within +/- 3 days
-        replace `med'_prophylaxis_2 = 1 if `med'_prophylaxis_2 == 0 & !missing(`med'_first_date, `tx'_date_`i') & abs(`med'_first_date - `tx'_date_`i') <= 3
+			****Same-day prescription for this flare drug
+			replace `same_day' = 1 if !missing(`med'_first_date, `tx'_date_`i') & `med'_first_date == `tx'_date_`i'
+
+			****Prescription for this flare drug 60-120 days after initiation
+			replace `follow_up' = 1 if !missing(`med'_first_date, `tx'_date_`i') & inrange(`tx'_date_`i' - `med'_first_date, 60, 120)
 		}
+
+		****Same-day prophylaxis
+		replace `med'_prophylaxis = 1 if `same_day' == 1
+
+		****Same flare drug on initiation date and 60-120 days later
+		replace `med'_prophylaxis_3m = 1 if `same_day' == 1 & `follow_up' == 1
+
+		drop `same_day' `follow_up'
 	}
-	
+
 	lab var `med'_prophylaxis "Prophylaxis prescribed at same time as ULT initiation"
 	lab define `med'_prophylaxis 0 "No" 1 "Yes", replace
 	lab val `med'_prophylaxis `med'_prophylaxis
-	
-	lab var `med'_prophylaxis_2 "Prophylaxis prescribed within 3 days of ULT initiation"
-	lab define `med'_prophylaxis_2 0 "No" 1 "Yes", replace
-	lab val `med'_prophylaxis_2 `med'_prophylaxis_2
 
-	***Check - remove later
-	log on
-	tab `med'_prophylaxis
-	tab `med'_prophylaxis_2
-	log off
+	lab var `med'_prophylaxis_3m "Prophylaxis prescribed at ULT initiation and 60-120 days later"
+	lab define `med'_prophylaxis_3m 0 "No" 1 "Yes", replace
+	lab val `med'_prophylaxis_3m `med'_prophylaxis_3m
 
 	****Time from diagnosis to first prescription
 	gen time_to_`med' = (`med'_first_date - ${disease}_inc_date) if `med'_first_date!=.

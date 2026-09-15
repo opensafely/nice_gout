@@ -341,7 +341,7 @@ if r(N) == 0 {
 }
 
 **Process catergorical outcomes of interest
-foreach outcome of varlist has_12m_fup_ult ult_high ult_prophylaxis ult_first_drug febuxostat_ever allopurinol_ever ult_ever {
+foreach outcome of varlist has_12m_fup_ult ult_high ult_prophylaxis_3m ult_prophylaxis ult_first_drug febuxostat_ever allopurinol_ever ult_ever {
 	rounded_categorical `outcome', outfile("$projectdir/output/data/summary_table_`cohort'.dta")
 }
 
