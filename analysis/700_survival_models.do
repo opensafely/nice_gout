@@ -751,7 +751,6 @@ program define competing_risk_model, rclass
 
 end
 
-
 *Load processed cohort ================================
 use "$projectdir/output/data/cohort_processed.dta", clear
 
@@ -833,33 +832,12 @@ local patient_predictors_core ///
 	
 local patient_predictors_extra ///
 	urate_before_ult_value egfr_before_ult_value
+
+***Recode categorised missing covariates as missing	
+foreach var in imd ethnicity bmicat smoke {
+    replace `var' = . if `var' == 9
+}	
 	
-*Create MI versions of categorical predictors with "Not known" recoded to missing
-gen imd_mi = imd
-replace imd_mi = . if imd_mi == 9
-label values imd_mi imd
-label var imd_mi "Index of multiple deprivation"
-
-gen ethnicity_mi = ethnicity
-replace ethnicity_mi = . if ethnicity_mi == 9
-label values ethnicity_mi ethnicity_n
-label var ethnicity_mi "Ethnicity"
-
-gen bmicat_mi = bmicat
-replace bmicat_mi = . if bmicat_mi == 9
-label values bmicat_mi bmicat
-label var bmicat_mi "BMI"
-
-gen smoke_mi = smoke
-replace smoke_mi = . if smoke_mi == 9
-label values smoke_mi smoke
-label var smoke_mi "Smoking status"
-
-**Define predictors for MI models
-local patient_predictors_core_mi age_land_decile i.sex i.imd_mi i.ethnicity_mi i.bmicat_mi i.smoke_mi i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land
-
-local patient_predictors_extra_mi urate_before_ult_value egfr_before_ult_value
-
 *Run landmark Cox models =======================================================
 
 **Generate temporary file to store outputs
@@ -882,19 +860,6 @@ postfile `cox_absrisk' str150(outcome) str150(outcome_label) str150(exposure) st
 global cox_absrisk `cox_absrisk'
 
 capture stset, clear
-
-/******Test criteria: remove********
-local cohort_entry_date flare_overall_date_1
-local landmark_date flare_overall_date_1
-local exposure_primary ckd_comb
-local exposure_primary_3cat imd
-local exposure_sens_nomiss ethnicity
-local exposures `exposure_primary' `exposure_primary_3cat' `exposure_sens_nomiss'
-gen test = 1
-local outcome_free_baseline test 
-local outcome_free_landmark test 
-local outcomes nsaid_last_date gout_adm_date_1     
-*/
 
 preserve
 
@@ -1118,7 +1083,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-/*		
+
 		****Run multiply imputed models
 		
 		**Temporarily save current analysis dataset
@@ -1136,13 +1101,13 @@ foreach outcome of local outcomes {
 		mi set mlong
 
 		**Register variables to be imputed
-		mi register imputed imd_mi ethnicity_mi bmicat_mi smoke_mi urate_before_ult_value egfr_before_ult_value
+		mi register imputed imd ethnicity bmicat smoke urate_before_ult_value egfr_before_ult_value
 
 		**Register regular variables
 		mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
 
-		**Multiple imputation by chained equations - 20 imputations
-		capture noisily mi impute chained (ologit) imd_mi (mlogit) ethnicity_mi bmicat_mi smoke_mi (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(20) rseed(12345) noisily
+		**Multiple imputation by chained equations
+		capture noisily mi impute chained (ologit) imd (mlogit) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) rseed(12345) noisily
 		
 		**Skip MI models if imputation fails
 		if _rc {
@@ -1155,16 +1120,16 @@ foreach outcome of local outcomes {
 		mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 
 		**MI multivariable core model
-		*local model_terms i.`exposure' `patient_predictors_core_mi'
+		*local model_terms i.`exposure' `patient_predictors_core'
 		*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
 
 		**MI multivariable model including baseline urate and eGFR
-		local model_terms i.`exposure' `patient_predictors_core_mi' `patient_predictors_extra_mi'
+		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 		cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
 		
 		**Restore dataset before MI
 		quietly use `pre_mi', clear
-*/		
+
 	}
 }
 	
