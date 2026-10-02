@@ -287,7 +287,7 @@ yaml_footer = f"""
         figure2: output/figures/loglog_*.svg
 
   generate_notebook:
-    run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
+    run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
     needs: [temporal_plots, incidence_graphs, sarima]
     outputs:
       moderately_sensitive:
