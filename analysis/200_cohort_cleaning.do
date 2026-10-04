@@ -409,7 +409,6 @@ lab var hernia_bl "Inguinal hernia"
 lab var hernia_new "Inguinal hernia"
 lab var hernia_12m "Inguinal hernia"
 
-
 **Disease-specific features at baseline and after diagnosis (passed from yaml) =================================*/
 
 foreach feature in $disease_features {

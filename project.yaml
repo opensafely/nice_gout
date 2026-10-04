@@ -1,5 +1,5 @@
 
-version: '4.0'
+version: 5
 
 actions:    
   generate_dataset_incidence:
@@ -193,7 +193,7 @@ actions:
         measure_csv: output/measures/measures_dataset_gout_2024.csv
 
   incidence_cleaning:
-    run: stata-mp:latest analysis/001_incidence_cleaning.do "gout" "2016-07-01" "2025-06-30"
+    run: stata-mp:v1 analysis/001_incidence_cleaning.do "gout" "2016-07-01" "2025-06-30"
     needs: [generate_dataset_incidence, measures_dataset_gout_2016, measures_dataset_gout_2017, measures_dataset_gout_2018, measures_dataset_gout_2019, measures_dataset_gout_2020, measures_dataset_gout_2021, measures_dataset_gout_2022, measures_dataset_gout_2023, measures_dataset_gout_2024]
     outputs:
       moderately_sensitive:
@@ -201,7 +201,7 @@ actions:
         table1: output/tables/redacted_counts_*.csv
         
   incidence_graphs:
-    run: stata-mp:latest analysis/002_incidence_graphs.do "gout" "2020-03-01"
+    run: stata-mp:v1 analysis/002_incidence_graphs.do "gout" "2020-03-01"
     needs: [incidence_cleaning]
     outputs:
       moderately_sensitive:
@@ -237,7 +237,7 @@ actions:
         measure_csv: output/measures/measures_practice_gout.csv
 
   cohort_cleaning:
-    run: stata-mp:latest analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
+    run: stata-mp:v1 analysis/200_cohort_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01" "agegroup|sex|ethnicity|imd|region" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [generate_dataset_primary, measures_practice_gout]
     outputs:
       highly_sensitive:
@@ -246,7 +246,7 @@ actions:
         data2: output/data/flares_long.dta
 
   cohort_cleaning_ref:
-    run: stata-mp:latest analysis/201_reference_cleaning.do "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
+    run: stata-mp:v1 analysis/201_reference_cleaning.do "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
     needs: [generate_dataset_reference]
     outputs:
       highly_sensitive:
@@ -254,7 +254,7 @@ actions:
         data1: output/data/cohort_processed_ref.dta
 
   data_tables:
-    run: stata-mp:latest analysis/300_data_tables.do "gout" "agegroup|sex|ethnicity|imd|region" "rheumatology"
+    run: stata-mp:v1 analysis/300_data_tables.do "gout" "agegroup|sex|ethnicity|imd|region" "rheumatology"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -262,7 +262,7 @@ actions:
         table1: output/tables/data_table_*.csv
 
   summary_tables:
-    run: stata-mp:latest analysis/400_summary_tables.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
+    run: stata-mp:v1 analysis/400_summary_tables.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "tophi|chronic_gout" "flare" "gout" "urate|creatinine|cholesterol|hba1c" "ult|allopurinol|allopurinol_high|febuxostat|febuxostat_high|colchicine|steroid|nsaid|diuretic|sglt2|ace_arb" "rheumatology"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -270,7 +270,7 @@ actions:
         table1: output/tables/summary_table_*.csv
 
   summary_tables_ref:
-    run: stata-mp:latest analysis/401_summary_tables_ref.do "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
+    run: stata-mp:v1 analysis/401_summary_tables_ref.do "chd|diabetes|cva|ckd|hypertension|depression|heart_failure|liver_disease|transplant|alcohol|hernia" "urate|creatinine|cholesterol|hba1c"
     needs: [cohort_cleaning_ref]
     outputs:
       moderately_sensitive:
@@ -278,15 +278,16 @@ actions:
         table1: output/tables/summary_table_ref_*.csv        
 
   temporal_plots:
-    run: stata-mp:latest analysis/500_temporal_plots.do "gout" "agegroup|sex|ethnicity|imd|region" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01"
+    run: stata-mp:v1 analysis/500_temporal_plots.do "gout" "agegroup|sex|ethnicity|imd|region" "2016-07-01" "2025-06-30" "2026-06-30" "2022-06-01"
     needs: [data_tables]
     outputs:
       moderately_sensitive:
         log1: logs/temporal_plots.log   
         figure1: output/figures/temporal_plot_*.svg
+        table1: output/tables/itsa_sensitivity.csv
 
   logistic_models:
-    run: stata-mp:latest analysis/600_logistic_models.do "gout"
+    run: stata-mp:v1 analysis/600_logistic_models.do "gout"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -295,7 +296,7 @@ actions:
         table2: output/tables/logistic_summary.csv
 
   survival_models:
-    run: stata-mp:latest analysis/700_survival_models.do "gout" "2026-06-30"
+    run: stata-mp:v1 analysis/700_survival_models.do "gout" "2026-06-30"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -307,7 +308,7 @@ actions:
         figure2: output/figures/loglog_*.svg
 
   generate_notebook:
-    run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
+    run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
     needs: [temporal_plots, incidence_graphs, sarima]
     outputs:
       moderately_sensitive:

@@ -64,7 +64,7 @@ medications_list_stata = "|".join(medications_str)
 outpatients_list_stata = "|".join(outpatients_str)
 
 yaml_header = f"""
-version: '4.0'
+version: 5
 
 actions:    
   generate_dataset_incidence:
@@ -165,7 +165,7 @@ yaml_incidence_template = ""
 if incidence == "yes":
   yaml_incidence_template = f"""
   incidence_cleaning:
-    run: stata-mp:latest analysis/001_incidence_cleaning.do "{diseases_list_stata}" "{studystart_date}" "{studyend_date}"
+    run: stata-mp:v1 analysis/001_incidence_cleaning.do "{diseases_list_stata}" "{studystart_date}" "{studyend_date}"
     needs: [generate_dataset_incidence, {needs_list}]
     outputs:
       moderately_sensitive:
@@ -173,7 +173,7 @@ if incidence == "yes":
         table1: output/tables/redacted_counts_*.csv
         
   incidence_graphs:
-    run: stata-mp:latest analysis/002_incidence_graphs.do "{diseases_list_stata}" "{intervention_date_1}"
+    run: stata-mp:v1 analysis/002_incidence_graphs.do "{diseases_list_stata}" "{intervention_date_1}"
     needs: [incidence_cleaning]
     outputs:
       moderately_sensitive:
@@ -216,7 +216,7 @@ yaml_practice = f"""
 
 yaml_footer = f"""
   cohort_cleaning:
-    run: stata-mp:latest analysis/200_cohort_cleaning.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}" "{demographic_list_stata}" "{comorbidities_list_stata}" "{disease_features_list_stata}" "{events_list_stata}" "{admissions_list_stata}" "{bloods_list_stata}" "{medications_list_stata}" "{outpatients_list_stata}"
+    run: stata-mp:v1 analysis/200_cohort_cleaning.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}" "{demographic_list_stata}" "{comorbidities_list_stata}" "{disease_features_list_stata}" "{events_list_stata}" "{admissions_list_stata}" "{bloods_list_stata}" "{medications_list_stata}" "{outpatients_list_stata}"
     needs: [generate_dataset_primary, measures_practice_{primary_disease}]
     outputs:
       highly_sensitive:
@@ -225,7 +225,7 @@ yaml_footer = f"""
         data2: output/data/flares_long.dta
 
   cohort_cleaning_ref:
-    run: stata-mp:latest analysis/201_reference_cleaning.do "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{comorbidities_list_stata}" "{bloods_list_stata}"
+    run: stata-mp:v1 analysis/201_reference_cleaning.do "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{comorbidities_list_stata}" "{bloods_list_stata}"
     needs: [generate_dataset_reference]
     outputs:
       highly_sensitive:
@@ -233,7 +233,7 @@ yaml_footer = f"""
         data1: output/data/cohort_processed_ref.dta
 
   data_tables:
-    run: stata-mp:latest analysis/300_data_tables.do "{primary_disease}" "{demographic_list_stata}" "{outpatients_list_stata}"
+    run: stata-mp:v1 analysis/300_data_tables.do "{primary_disease}" "{demographic_list_stata}" "{outpatients_list_stata}"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -241,7 +241,7 @@ yaml_footer = f"""
         table1: output/tables/data_table_*.csv
 
   summary_tables:
-    run: stata-mp:latest analysis/400_summary_tables.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{comorbidities_list_stata}" "{disease_features_list_stata}" "{events_list_stata}" "{admissions_list_stata}" "{bloods_list_stata}" "{medications_list_stata}" "{outpatients_list_stata}"
+    run: stata-mp:v1 analysis/400_summary_tables.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{comorbidities_list_stata}" "{disease_features_list_stata}" "{events_list_stata}" "{admissions_list_stata}" "{bloods_list_stata}" "{medications_list_stata}" "{outpatients_list_stata}"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -249,7 +249,7 @@ yaml_footer = f"""
         table1: output/tables/summary_table_*.csv
 
   summary_tables_ref:
-    run: stata-mp:latest analysis/401_summary_tables_ref.do "{comorbidities_list_stata}" "{bloods_list_stata}"
+    run: stata-mp:v1 analysis/401_summary_tables_ref.do "{comorbidities_list_stata}" "{bloods_list_stata}"
     needs: [cohort_cleaning_ref]
     outputs:
       moderately_sensitive:
@@ -257,15 +257,16 @@ yaml_footer = f"""
         table1: output/tables/summary_table_ref_*.csv        
 
   temporal_plots:
-    run: stata-mp:latest analysis/500_temporal_plots.do "{primary_disease}" "{demographic_list_stata}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}"
+    run: stata-mp:v1 analysis/500_temporal_plots.do "{primary_disease}" "{demographic_list_stata}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}"
     needs: [data_tables]
     outputs:
       moderately_sensitive:
         log1: logs/temporal_plots.log   
         figure1: output/figures/temporal_plot_*.svg
+        table1: output/tables/itsa_sensitivity.csv
 
   logistic_models:
-    run: stata-mp:latest analysis/600_logistic_models.do "{primary_disease}"
+    run: stata-mp:v1 analysis/600_logistic_models.do "{primary_disease}"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -274,7 +275,7 @@ yaml_footer = f"""
         table2: output/tables/logistic_summary.csv
 
   survival_models:
-    run: stata-mp:latest analysis/700_survival_models.do "{primary_disease}" "{studyfup_date}"
+    run: stata-mp:v1 analysis/700_survival_models.do "{primary_disease}" "{studyfup_date}"
     needs: [cohort_cleaning]
     outputs:
       moderately_sensitive:
@@ -286,7 +287,7 @@ yaml_footer = f"""
         figure2: output/figures/loglog_*.svg
 
   generate_notebook:
-    run: jupyter:latest jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
+    run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
     needs: [temporal_plots, incidence_graphs, sarima]
     outputs:
       moderately_sensitive:

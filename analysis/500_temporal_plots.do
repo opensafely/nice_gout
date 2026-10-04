@@ -75,12 +75,10 @@ foreach date in studystart studyend studyfup intervention {
 }
 
 *Set sensitivity intervention dates
-global intervention_sens1 = $intervention + 6
+global intervention_sens1 = $intervention + 12
 di %tm $intervention_sens1
-global intervention_sens2 = $intervention + 12
+global intervention_sens2 = $intervention - 12
 di %tm $intervention_sens2
-global intervention_sens3 = $intervention - 12
-di %tm $intervention_sens3
 
 set type double
 
@@ -88,7 +86,14 @@ set scheme plotplainblind
 
 *Single line figures for full cohort (month year variables) ==================================*/
 
+**File to store sensitivity results
+tempname senspost
+tempfile sensresults
+
+postfile `senspost' str20 table str60 outcome str30 analysis_type trend_change ci_lower ci_upper p_value using `sensresults', replace
+
 **Loop through data tables with different inclusion criteria
+
 foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiagnosis baseline {
 	
 	**Import rounded and redacted data tables
@@ -111,7 +116,7 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 	**Extract outcomes of interest from data table
 	levelsof outcome_name, local(outcomes)
 	di `outcomes'
-
+	
 	**Loop through outcomes of interest for full cohort
 	foreach outcome in `outcomes' {
 
@@ -284,7 +289,7 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 			gen t = month_year - `start'
 			
 			****Loop over primary and sensitivity intervention dates
-			foreach analysis in primary sens1 sens2 sens3 {
+			foreach analysis in primary sens1 sens2 {
 
 				local suffix = cond("`analysis'" == "primary", "", "_`analysis'")
 
@@ -295,9 +300,8 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 				else {
 					local intervention = ${intervention_`analysis'}
 					
-					if "`analysis'" == "sens1" local intlabel "NICE Guideline + 6 months"
-					if "`analysis'" == "sens2" local intlabel "NICE Guideline + 12 months"
-					if "`analysis'" == "sens3" local intlabel "NICE Guideline - 12 months"
+					if "`analysis'" == "sens1" local intlabel "NICE Guideline + 12 months"
+					if "`analysis'" == "sens2" local intlabel "NICE Guideline - 12 months"
 				}
 
 				local graphname = substr(strtoname("`outcome'`suffix'"), 1, 32)
@@ -313,25 +317,51 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 				****Fit segmented regression with NW SEs (with 5 lags) and 
 				newey prop c.t i.post c.t_post, lag(5)
 				
-				****Extract coefficients (annualised) and p-values
+				****Extract coefficients (annualised), 95% CIs and p-values
+				local crit = invttail(e(df_r), 0.025)
+
 				local b_pre = 12*(_b[t])
+				local lci_pre = 12*(_b[t] - `crit'*_se[t])
+				local uci_pre = 12*(_b[t] + `crit'*_se[t])
+
 				local b_step = _b[1.post] //this one shouldn't be annualised
+				local lci_step = _b[1.post] - `crit'*_se[1.post]
+				local uci_step = _b[1.post] + `crit'*_se[1.post]
+
 				local b_chg = 12*(_b[c.t_post])
-				local p_pre: display %5.3f 2*ttail(e(df_r), abs(_b[t]      / _se[t]))
+				local lci_chg = 12*(_b[c.t_post] - `crit'*_se[c.t_post])
+				local uci_chg = 12*(_b[c.t_post] + `crit'*_se[c.t_post])
+
+				local p_pre: display %5.3f 2*ttail(e(df_r), abs(_b[t] / _se[t]))
 				local p_step: display %5.3f 2*ttail(e(df_r), abs(_b[1.post] / _se[1.post]))
 				local p_chg: display %5.3f 2*ttail(e(df_r), abs(_b[c.t_post] / _se[c.t_post]))
-				
-				****Post-intervention trends
+
+				****Post-intervention trend
 				lincom _b[t] + _b[c.t_post]
-				local b_post = 12*(r(estimate))
+				local b_post = 12*r(estimate)
+				local lci_post = 12*r(lb)
+				local uci_post = 12*r(ub)
 				local p_post: display %5.3f r(p)
-				
+
 				****Formatting
 				local f_pre: display %9.2f `b_pre'
 				local f_step: display %9.2f `b_step'
 				local f_chg: display %9.2f `b_chg'
 				local f_post: display %9.2f `b_post'
+
+				local f_lci_pre: display %9.2f `lci_pre'
+				local f_uci_pre: display %9.2f `uci_pre'
+				local f_lci_step: display %9.2f `lci_step'
+				local f_uci_step: display %9.2f `uci_step'
+				local f_lci_chg: display %9.2f `lci_chg'
+				local f_uci_chg: display %9.2f `uci_chg'
+				local f_lci_post: display %9.2f `lci_post'
+				local f_uci_post: display %9.2f `uci_post'
 				
+				foreach x in f_pre f_step f_chg f_post f_lci_pre f_uci_pre f_lci_step f_uci_step f_lci_chg f_uci_chg f_lci_post f_uci_post {
+					local `x' = strtrim("``x''")
+				}
+
 				****Format very small p-values
 				foreach p in p_pre p_step p_chg p_post {
 					if trim("``p''") == "0.000" {
@@ -341,19 +371,19 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 						local `p' "=``p''"
 					}
 				}
-				
+
 				****Generate text box for key ITSA values
 				local boxlines ""
 
 				foreach s in ///
-					`"Trend before:"' ///
-					`"`f_pre'%/yr (p`p_pre')"' ///
-					`"Trend after:"' ///
-					`"`f_post'%/yr (p`p_post')"' ///
-					`"Trend change:"' ///
-					`"`f_chg'%/yr (p`p_chg')"' ///
-					`"Step change:"' ///
-					`"`f_step'% (p`p_step')"' {
+					`"Pre-trend: `f_pre'%/yr"' ///
+					`"95% CI `f_lci_pre' to `f_uci_pre'; p`p_pre'"' ///
+					`"Post-trend: `f_post'%/yr"' ///
+					`"95% CI `f_lci_post' to `f_uci_post'; p`p_post'"' ///
+					`"Trend change: `f_chg'%/yr"' ///
+					`"95% CI `f_lci_chg' to `f_uci_chg'; p`p_chg'"' ///
+					`"Step change: `f_step'%"' ///
+					`"95% CI `f_lci_step' to `f_uci_step'; p`p_step'"' {
 
 					local boxlines `"`boxlines' `"`s'"'"'
 				}
@@ -363,31 +393,116 @@ foreach table in flare_blood ultrisk posttarget postult atultinitiation postdiag
 				local xmax = r(max)
 				local xmin = r(min)
 				local xrange = `xmax' - `xmin'
-				local xbox = `xmax' + 0.05*`xrange'
+				local xbox = `xmax' + 0.03*`xrange'
 
 				quietly summarize prop if e(sample), meanonly
-				local ytop = r(max)
-				local ybot = r(min)
-				local yrange = `ytop' - `ybot'
-				local ybox = `ybot' + 0.15*`yrange'
+				*local ytop = r(max)
+				*local ybot = r(min)
+				*local yrange = `ytop' - `ybot'
+				local ybox = `ymin' + 0.25*(`ymax' - `ymin')
 
 				****Predicted values for plotting
 				predict yhat if e(sample)
 
 				****Plot observed and fitted lines
 				twoway scatter prop month_year if e(sample), ytitle("`ytitle'", size(medsmall)) color(emerald%30) msymbol(circle) || line yhat month_year if e(sample) & month_year<`intervention', lcolor(emerald) lstyle(solid) || line yhat month_year if e(sample) & month_year>=`intervention', lcolor(emerald) lstyle(solid) yscale(range(`ymin' `ymax')) ylabel(`ymin'(`ystep')`ymax', `format' nogrid labsize(small)) xaxis(1 2) xtitle("`xtitle'", size(medsmall) margin(medsmall) axis(2)) xlabel(`xlabel', nogrid labsize(small) axis(2)) xlabel(`intervention' "`intlabel'", axis(1) labsize(small) labcolor(navy)) xtitle("", axis(1)) xscale(noline axis(1)) title("", size(medium) margin(b=2)) xline(`intervention') legend(off) xsize(16) ysize(9) ///
-				graphregion(margin(r=20)) plotregion(margin(r=15)) ///
-				text(`ybox' `xbox' `boxlines', place(e) just(left) box bcolor(white) margin(small) size(small)) ///
+				graphregion(margin(r=25)) plotregion(margin(r=15)) ///
+				text(`ybox' `xbox' `boxlines', place(e) just(left) box bcolor(white) margin(small) size(small) linegap(1)) ///
 				name("`graphname'", replace)
 				graph export "$projectdir/output/figures/temporal_plot_`table'_`outcome'_itsa`suffix'.$img", replace width(5000)
 				
-				actest, lag(18)	
+				if "`analysis'" == "primary" {
+					actest, lag(18)
+				}
+				
+				****Sensitivity analysis for alternative Newey-West lag specifications, seasonality and COVID-19 (for primary analysis only)
+				if "`analysis'" == "primary" {
+
+					foreach L in 3 5 12 {
+
+						quietly newey prop c.t i.post c.t_post, lag(`L')
+
+						local crit = invttail(e(df_r), 0.025)
+
+						local sens_b_chg = 12*_b[c.t_post]
+						local sens_se_chg = 12*_se[c.t_post]
+						local sens_lci_chg = `sens_b_chg' - `crit'*`sens_se_chg'
+						local sens_uci_chg = `sens_b_chg' + `crit'*`sens_se_chg'
+						local sens_p_chg = 2*ttail(e(df_r), abs(_b[c.t_post] / _se[c.t_post]))
+
+						post `senspost' ("`table'") ("`outcome'") ("NW lag `L'") (`sens_b_chg') (`sens_lci_chg') (`sens_uci_chg') (`sens_p_chg')
+					}
+
+					capture drop calmonth
+					gen calmonth = month(dofm(month_year))
+
+					capture drop covid
+					gen covid = inrange(month_year, ym(2020,3), ym(2022,2))
+
+					quietly newey prop c.t i.post c.t_post, lag(5)
+
+					local crit = invttail(e(df_r), 0.025)
+
+					local b_noseason = 12*_b[c.t_post]
+					local se_noseason = 12*_se[c.t_post]
+					local lci_noseason = `b_noseason' - `crit'*`se_noseason'
+					local uci_noseason = `b_noseason' + `crit'*`se_noseason'
+					local p_noseason = 2*ttail(e(df_r), abs(_b[c.t_post] / _se[c.t_post]))
+
+					post `senspost' ("`table'") ("`outcome'") ("Primary: NW lag 5") (`b_noseason') (`lci_noseason') (`uci_noseason') (`p_noseason')
+
+					quietly newey prop c.t i.post c.t_post i.calmonth, lag(5)
+
+					local crit = invttail(e(df_r), 0.025)
+
+					local b_season = 12*_b[c.t_post]
+					local se_season = 12*_se[c.t_post]
+					local lci_season = `b_season' - `crit'*`se_season'
+					local uci_season = `b_season' + `crit'*`se_season'
+					local p_season_chg = 2*ttail(e(df_r), abs(_b[c.t_post] / _se[c.t_post]))
+
+					testparm i.calmonth
+					local p_season = r(p)
+
+					post `senspost' ("`table'") ("`outcome'") ("Season adjusted") (`b_season') (`lci_season') (`uci_season') (`p_season_chg')
+
+					quietly newey prop c.t i.post c.t_post covid, lag(5)
+
+					local crit = invttail(e(df_r), 0.025)
+
+					local b_covid = 12*_b[c.t_post]
+					local se_covid = 12*_se[c.t_post]
+					local lci_covid = `b_covid' - `crit'*`se_covid'
+					local uci_covid = `b_covid' + `crit'*`se_covid'
+					local p_covid = 2*ttail(e(df_r), abs(_b[c.t_post] / _se[c.t_post]))
+
+					post `senspost' ("`table'") ("`outcome'") ("COVID adjusted") (`b_covid') (`lci_covid') (`uci_covid') (`p_covid')
+					}
 				}
 			}
 		}
 		restore
 	}
 }
+
+postclose `senspost'
+
+use `sensresults', clear
+
+format trend_change ci_lower ci_upper %6.2f
+format p_value %9.4f
+
+gen analysis_order = .
+replace analysis_order = 1 if analysis_type == "Primary: NW lag 5"
+replace analysis_order = 2 if analysis_type == "NW lag 3"
+replace analysis_order = 3 if analysis_type == "NW lag 12"
+replace analysis_order = 4 if analysis_type == "Season adjusted"
+replace analysis_order = 5 if analysis_type == "COVID adjusted"
+
+sort table analysis_order 
+drop analysis_order
+
+export delimited using "$projectdir/output/tables/itsa_sensitivity.csv", replace
 
 *Multi-line figures by demographic characteristics (month year variables) ==================================*/
 
