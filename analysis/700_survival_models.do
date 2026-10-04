@@ -28,6 +28,7 @@ capture mkdir "$projectdir/output/tables"
 global logdir "$projectdir/logs"
 cap log close
 log using "$logdir/survival_models.log", replace
+log off
 
 *Set Ado file path
 adopath + "$projectdir/analysis/extra_ados"
@@ -439,14 +440,17 @@ program define cox_model_mi, rclass
 	di as txt "MI model terms = `model_terms'"
 	
 	**Run multiply imputed Cox model
-	capture noisily mi estimate, post: stcox `model_terms', vce(cluster practice_id)
+	capture noisily mi estimate, post noisily: stcox `model_terms', vce(cluster practice_id)
 	
-	**Skip if estimation failed
-	if _rc {
-		di as txt "Skipping MI model (estimation failure): `model_terms'"
+	local mi_rc = _rc
+
+	if `mi_rc' {
+		di as error "MI Cox estimation failed; return code `mi_rc'"
 		return scalar model_ok = 0
 		exit
 	}
+
+	di as result "MI Cox estimation completed"
 	
 	**Check model ran
 	return scalar model_ok = 1
@@ -819,7 +823,8 @@ format hernia_land_date %td
 label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 
 **Define outcome list to loop through
-local outcomes sec_ckd_egfr_land_date first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
+*local outcomes sec_ckd_egfr_land_date first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
+local outcomes sec_ckd_egfr_land_date
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1105,16 +1110,25 @@ foreach outcome of local outcomes {
 
 		**Register regular variables
 		mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
+		
+		log on
 
 		**Multiple imputation by chained equations
 		capture noisily mi impute chained (ologit) imd (mlogit) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) rseed(12345) noisily
 		
 		**Skip MI models if imputation fails
-		if _rc {
-			di as txt "MI failed for `outcome' / `exposure'; skipping MI models."
+		local mi_rc = _rc
+
+		if `mi_rc' {
+			di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
 			quietly use `pre_mi', clear
 			continue
 		}
+
+		di as result "MI imputation completed: `outcome' / `exposure'"
+		mi describe
+		
+		log off
 
 		**Set survival data for MI analysis
 		mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
@@ -1123,9 +1137,13 @@ foreach outcome of local outcomes {
 		*local model_terms i.`exposure' `patient_predictors_core'
 		*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
 
+		log on
+		
 		**MI multivariable model including baseline urate and eGFR
 		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 		cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
+		
+		log off
 		
 		**Restore dataset before MI
 		quietly use `pre_mi', clear
