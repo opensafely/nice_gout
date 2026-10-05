@@ -63,7 +63,7 @@ capture program drop cox_model
 program define cox_model, rclass
 
 	**Model arguments
-	args model_terms focal_predictor outcome outlabel model_label
+	args model_terms focal_predictor outcome outlabel model_label run_ph
 	di as txt "Model terms = `model_terms'"
 	
 	**Run model
@@ -76,6 +76,27 @@ program define cox_model, rclass
 		exit
 	}
 	
+	**Global proportional hazards test for primary fully adjusted model
+	if "`run_ph'" == "1" {
+
+		local ph_exposure = subinstr("`focal_predictor'", "i.", "", .)
+
+		capture quietly estat phtest
+		local ph_rc = _rc
+
+		local ph_chi2 = .
+		local ph_df = .
+		local ph_pvalue = .
+
+		if `ph_rc' == 0 {
+			local ph_chi2 = r(chi2)
+			local ph_df = r(df)
+			local ph_pvalue = chi2tail(`ph_df', `ph_chi2')
+		}
+
+		post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") (`ph_chi2') (`ph_df') (`ph_pvalue') (`ph_rc')
+	}
+
 	**Check to ensure model ran ok
 	return scalar model_ok = 1
 	
@@ -462,7 +483,7 @@ program define cox_model_mi, rclass
 	local person_years = round(e(risk), 5)
 
 	**Model degrees of freedom, consistent with ordinary Cox rows
-	local df = e(df_m)
+	local df = e(df_r_mi)
 	
 	**Strip factor prefix from focal predictor
 	local focalvar "`focal_predictor'"
@@ -785,16 +806,17 @@ egen censor_date_death = rowmin(`study_end_date' `dereg_date')
 format censor_date_death %td
 
 **Primary exposure variable
-local primary_exposure urate_12m_ult_recode //urate recoded as not attained if urate not checked (coded as 1/0)
+local exposure_complete_360 urate_12m_ult //urate checked and target attained vs. not attained within 12 months of ULT initiation (coded as 1/0/missing)
 
 **Sensitivity exposure variables
-local exposure_complete_360 urate_12m_ult //urate checked and target attained vs. not attained within 12 months of ULT initiation (coded as 1/0/missing)
+local exposure_nomiss_360 urate_12m_ult_recode //urate recoded as not attained if urate not checked (coded as 1/0)
 local exposure_sens_misscat urate_12m_ult_cat //separate category coded if urate not checked (1/0/9)
 local exposure_sens_300 urate_300_12m_ult
 local exposure_sens_300_360 urate_targets_12m_ult
 
 **Define exposure list to loop through
-local secondary_exposures `exposure_complete_360'  `exposure_sens_misscat' `exposure_sens_300' `exposure_sens_300_360'
+local primary_exposure `exposure_complete_360'
+local secondary_exposures `exposure_nomiss_360'  `exposure_sens_misscat' `exposure_sens_300' `exposure_sens_300_360'
 *local exposures `primary_exposure' `secondary_exposures'
 local exposures `primary_exposure'
 
@@ -871,6 +893,14 @@ tempname cox_absrisk
 postfile `cox_absrisk' str150(outcome) str150(outcome_label) str150(exposure) str150(exposure_category) str150(reference_category) str80(model) str50(measure) double estimate_pct lower95_pct upper95_pct using "$projectdir/output/data/landmark_cox_absrisk.dta", replace	
 
 global cox_absrisk `cox_absrisk'
+
+**Global proportional hazards test results
+tempname cox_ph
+
+postfile `cox_ph' str150 outcome str150 exposure str80 model double chi2 df pvalue int return_code ///
+    using "$projectdir/output/data/landmark_cox_ph.dta", replace
+
+global cox_ph `cox_ph'
 
 capture stset, clear
 
@@ -969,22 +999,16 @@ foreach outcome of local outcomes {
 		local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable core"' 
 		
-		****Run multivariable model with baseline urate and eGFR (values closest to before ULT initiation, but within 12m)
+		****Run multivariable model with baseline urate and eGFR (values closest to before ULT initiation, but within 12m); also output PH test for this if it is the primary model
 		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
-		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"'
+		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'")
+		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"' "`run_ph'"
 
-		/*
-		****Run Fine-Gray competing-risk models
-		
-		if "`outcome'" != "death_land_date" {
-			local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
-			competing_risk_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray core"' `"death_compete"'
-
-			****Run Fine-Gray competing-risk multivariable model with baseline urate and eGFR
+		****Run Fine-Gray competing-risk models  for primary model
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
-			competing_risk_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
+				competing_risk_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
 		}
-		*/
 		
 		****Output KM and loglog plots
 		
@@ -1060,7 +1084,7 @@ foreach outcome of local outcomes {
 				}
 			}
 			
-			*****Log-log plot truncated at latest non-redacted time
+			*****Log-log plot truncated at latest non-redacted time (Default: no log-log graph produced)
 				
 			**Store truncated follow-up in years
 			tempvar stop_truncated fail_truncated
@@ -1071,29 +1095,28 @@ foreach outcome of local outcomes {
 			**Temporarily reset survival data using truncated follow-up
 			quietly stset `stop_truncated', failure(`fail_truncated' == 1)
 			
-			/*
-			**X-axis
-			quietly summarize _t if !missing(`exposure') & _st==1 & _t>0, meanonly
-			local log_xmin = max(-2, floor(ln(r(min))))
-			local log_xmax = ceil(ln(r(max)))
-			*/
-			
-			**X-axis: include all positive follow-up times
-			quietly summarize _t if !missing(`exposure') & _st==1 & _t>0, meanonly
-			local log_xmin = floor(ln(r(min)))
-			local log_xmax = ceil(ln(r(max)))
+			**X-axis formatting
+			local loglog_graph_ok = 0
 
-			capture noisily stphplot if !missing(`exposure') & _st==1, by(`exposure') `loglog_plotopts' ytitle("log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax')) xlabel(`log_xmin'(1)`log_xmax', nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
+			**Check for events within truncated follow-up
+			quietly summarize _t if !missing(`exposure') & _st == 1 & _d == 1 & _t > 0, meanonly
 
-			local loglog_graph_ok = (_rc == 0)
+			if r(N) > 0 {
+				local log_xmin = floor(ln(r(min)))
+				quietly summarize _t if !missing(`exposure') & _st == 1 & _t > 0, meanonly
+				local log_xmax = ceil(ln(r(max)))
+
+				capture noisily stphplot if !missing(`exposure') & _st==1, by(`exposure') `loglog_plotopts' ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax')) xlabel(`log_xmin'(1)`log_xmax', nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
+
+				local loglog_graph_ok = (_rc == 0)
+			}
 			
 			**Restore original survival settings
 			stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 			drop `stop_truncated' `fail_truncated'
 
 			if `loglog_graph_ok' {
-
-				capture graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", replace
+				capture graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", name(`loglogname') replace
 
 				if _rc == 0 {
 					local ++n_loglog_graphs
@@ -1104,7 +1127,7 @@ foreach outcome of local outcomes {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
 
-		****Run multiply imputed models for key outcomes and exposures only 
+		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
 			**Temporarily save current analysis dataset
@@ -1178,6 +1201,7 @@ restore
 postclose $cox_measures
 postclose $cox_risk
 postclose $cox_absrisk
+postclose $cox_ph
 
 *Output postfiles to csv - with failsafes
 capture use "$projectdir/output/data/landmark_cox_summary.dta", clear
@@ -1217,7 +1241,7 @@ else {
 	sort outcome exposure model measure exposure_category
 }
 
-export delimited using "$projectdir/output/tables/landmark_cox_absrisk.csv", replace
+export delimited using "$projectdir/output/tables/landmark_cox_absrisk.csv", replace datafmt
 
 *Output Cox model results
 capture use "$projectdir/output/data/landmark_cox_risk_table.dta", clear
@@ -1268,6 +1292,14 @@ else {
 }
 
 export delimited using "$projectdir/output/tables/landmark_cox_risk_table.csv", replace
+
+**Export PH results
+use "$projectdir/output/data/landmark_cox_ph.dta", clear
+
+format chi2 pvalue %12.4f
+format df return_code %9.0f
+
+export delimited using "$projectdir/output/tables/landmark_cox_ph.csv", datafmt replace
 
 *Create dummy KM graph only if no KM graphs were exported
 if `n_km_graphs' == 0 {

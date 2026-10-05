@@ -521,7 +521,12 @@ foreach var of varlist allopurinol_high_first_date febuxostat_high_first_date {
 	lab define `drug'_high 0 "No" 1 "Yes"
 	lab val `drug'_high `drug'_high 
 	tab `drug'_high, missing
-
+	
+***For landmark analyses: 12 months after medication initiation
+gen `drug'_landmark = (`drug'_first_date + 365) if `drug'_first_date !=.
+format `drug'_landmark %td
+label var `drug'_landmark "12 months after `Drug' initiation"	
+	
 ***Prescriptions for individual drugs within class within a timeframe after diagnosis (amend list as necessary) and prophylaxis use
 
 ***Store max number of prescriptions for prophylaxis drugs
@@ -918,10 +923,34 @@ foreach blood in $bloods {
 **Generate eGFR from serum creatinine (using CKD-EPI formula with no ethnicity) ============================*/ 
 preserve
 
-keep patient_id age sex ult_first_date creatinine_bl_date creatinine_value_* creatinine_date_*
+keep patient_id age sex ult_first_date ult_landmark creatinine_bl_date creatinine_value_* creatinine_date_*
 
 reshape long creatinine_value_ creatinine_date_, i(patient_id) j(creatinine_order)
- 
+
+***For landmark analyses
+
+****Count distinct dates with a recorded creatinine value in the first 365 days after landmark)
+egen creat_date_tag = tag(patient_id creatinine_date_) if !missing(ult_landmark, creatinine_date_, creatinine_value_) & (creatinine_date_ > ult_landmark) & (creatinine_date_ <= (ult_landmark + 365))
+
+bysort patient_id: egen creat_n_12m_land = total(creat_date_tag)
+
+****Missing landmark means monitoring cannot be defined
+replace creat_n_12m_land = . if missing(ult_landmark)
+
+****Indicators for at least one or two testing dates
+gen creat_any_12m_land = creat_n_12m_land >= 1 if !missing(creat_n_12m_land)
+gen creat_two_12m_land = creat_n_12m_land >= 2 if !missing(creat_n_12m_land)
+
+label variable creat_n_12m_land "Number of creatinine testing dates within 365 days after landmark"
+label variable creat_any_12m_land "At least one creatinine testing date within 365 days after landmark"
+label variable creat_two_12m_land "At least two creatinine testing dates within 365 days after landmark"
+
+label define creat_monitor_yn 0 "No" 1 "Yes", replace
+label values creat_any_12m_land creat_two_12m_land creat_monitor_yn
+
+drop creat_date_tag
+
+***General creatinine/eGFR processing 
 gen SCr_adj = creatinine_value_/88.4
 
 gen min = .
@@ -979,7 +1008,7 @@ drop n egfr_before_ult time_egfr_before_ult
 
 drop egfr_ckd subsequent_egfr_ckd
 
-local summaryvars first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date egfr_bl_value egfr_before_ult_value
+local summaryvars first_egfr_ckd_date second_egfr_ckd_date egfr_bl_date egfr_bl_value egfr_before_ult_value creat_n_12m_land creat_any_12m_land creat_two_12m_land
 
 **Store variable labels and value-label names before collapse
 local i = 0
@@ -1873,11 +1902,6 @@ replace ckd_free_ult =. if ult_first_date ==.
 label def ckd_free_ult 0 "No" 1 "Yes"
 label val ckd_free_ult ckd_free_ult
 label var ckd_free_ult "No evidence of CKD at ULT initiation"
-
-**Landmark date: 12 months after ULT initiation
-gen ult_landmark = (ult_first_date + 365) if ult_first_date !=.
-format ult_landmark %td
-label var ult_landmark "ULT initiation + 12 months"
 
 **CKD status with relation to landmark date
 gen ckd_pre_landmark = 0

@@ -74,7 +74,8 @@ set scheme plotplainblind
 
 *Function to round and redact categorical variables ======================*/
 program define rounded_categorical
-    syntax varlist(min=1 max=1), outfile(string)
+    syntax varlist(min=1 max=1), outfile(string) [group(string)]
+	if "`group'" == "" local group "Not applicable"
 	local outcome `varlist'
 	preserve 
 		contract `outcome'
@@ -92,8 +93,10 @@ program define rounded_categorical
 		replace count =. if count<=7
 		format percent %14.4f
 		format count total %14.0f
-		list variable categories count total percent
-		keep variable categories count total percent
+		gen str80 exposure_group = "`group'"
+		order exposure_group, first
+		list exposure_group variable categories count total percent
+		keep exposure_group variable categories count total percent
 		capture append using `"`outfile'"'
 		save `"`outfile'"', replace
     restore
@@ -101,7 +104,8 @@ end
 
 *Function to round and redact continuous variables (amend to sum, rather than count, for ordinal variables) ======================*/
 program define rounded_continuous
-    syntax varlist(min=1 max=1), outfile(string)
+    syntax varlist(min=1 max=1), outfile(string) [group(string)]
+	if "`group'" == "" local group "Not applicable"
 	local outcome `varlist'
 	preserve 
 		local outcome_desc : variable label `outcome'
@@ -121,8 +125,10 @@ program define rounded_continuous
 		format mean %14.2f
 		format stdev %14.2f
 		format count %14.0f
-		list variable categories mean stdev count total
-		keep variable categories mean stdev count total
+		gen str80 exposure_group = "`group'"
+		order exposure_group, first
+		list exposure_group variable categories mean stdev count total
+		keep exposure_group variable categories mean stdev count total
 		capture append using `"`outfile'"'
 		save `"`outfile'"', replace
     restore
@@ -353,6 +359,116 @@ if _rc == 0 {
 }
 else {
 	di as text "No summary table created; skipping export."
+}
+
+*Summary table of events for landmark survival analyses ========================*
+
+**Store table name
+local cohort "landmark"
+
+**Erase any existing data file
+capture erase "$projectdir/output/data/summary_table_`cohort'.dta"
+
+**Load processed dataset
+use "$projectdir/output/data/cohort_processed.dta", clear
+
+**Set inclusion criteria, as per landmark criteria
+
+***Define landmark date
+local landmark_date ult_landmark //date of first ULT drug + 12 months
+
+***Censor criteria
+gen study_end = date("$studyfup_date", "YMD")
+format study_end %td
+local study_end_date study_end //end of study follow-up period
+local death_date date_of_death //date of death
+local dereg_date reg_end_date //end of practice registration
+egen censor_date = rowmin(`study_end_date' `death_date' `dereg_date') //first of the above dates
+format censor_date %td
+label var censor_date "Censoring date"
+
+***Outcome status at baseline/landmark variables
+local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
+local outcome_free_landmark ckd_free_landmark //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date + 12 months
+
+**Apply landmark eligibility criteria
+keep if !missing(`landmark_date') & !missing(censor_date) & (censor_date > `landmark_date') //landmark date present and before censor date
+keep if `outcome_free_baseline' ==1 //outcome not present before cohort entry
+keep if `outcome_free_landmark' ==1 //outcome not present before landmark
+
+**Apply exposure criteria
+local primary_exposure urate_12m_ult_cat //separate category coded if urate not checked (1/0/9)
+keep if !missing(`primary_exposure')
+
+**Generate follow-up variable after landmark
+gen landmark_12m_fup = (censor_date >= ult_landmark + 365) if !missing(ult_landmark, censor_date)
+label define landmark_fup_lab 0 "Less than 365 days after landmark" 1 "At least 365 days after landmark", replace
+label values landmark_12m_fup landmark_fup_lab
+label variable landmark_12m_fup "Available follow-up after landmark"
+
+**Categorical adjustment variables of interest
+local categorical_vars ///
+	sex imd ethnicity bmicat smoke diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land landmark_12m_fup 
+
+**Continuous adjustment variables of interest
+local continuous_vars ///
+    age_land_decile urate_before_ult_value egfr_before_ult_value
+	
+local baseline_cohort "$projectdir/output/data/baseline_landmark_cohort.dta"
+local baseline_results "$projectdir/output/data/summary_table_`cohort'.dta"
+
+quietly save "`baseline_cohort'", replace
+capture erase "`baseline_results'"
+
+quietly levelsof `primary_exposure', local(exposure_levels)
+local exposure_label : value label `primary_exposure'
+
+**Loop through observed exposure groups
+foreach exposure_level of local exposure_levels {
+
+    quietly use "`baseline_cohort'", clear
+    keep if `primary_exposure' == `exposure_level'
+
+    **Default to numeric value if no label is available
+    local group_label "`exposure_level'"
+
+    if "`exposure_label'" != "" {
+        local group_label : label `exposure_label' `exposure_level'
+    }
+
+    **Categorical variables
+    foreach var of local categorical_vars {
+        rounded_categorical `var', outfile("`baseline_results'") group("`group_label'")
+    }
+
+    **Continuous variables
+    foreach var of local continuous_vars {
+        rounded_continuous `var', outfile("`baseline_results'") group("`group_label'")
+    }
+	
+	**Monitoring summaries: require a full year after landmark
+    keep if landmark_12m_fup == 1
+
+    quietly count
+    if r(N) > 0 {
+
+        foreach var in creat_any_12m_land creat_two_12m_land {
+            rounded_categorical `var', outfile("`baseline_results'") group("`group_label'")
+        }
+
+        rounded_continuous creat_n_12m_land, outfile("`baseline_results'") group("`group_label'")
+    }
+}
+
+**Export to CSV - with check for dummy data
+capture confirm file "`baseline_results'"
+if _rc == 0 {
+    use "`baseline_results'", clear
+    order exposure_group variable categories
+    export delimited using "$projectdir/output/tables/summary_table_`cohort'.csv", datafmt replace
+}
+else {
+    di as text "No summary table created; skipping export."
 }
 
 log close
