@@ -203,10 +203,10 @@ program define cox_model, rclass
     scalar hi = exp(b + invnormal(0.975)*se)
     scalar pv = 2*normal(-abs(b/se))
 
-    local hazardratio = round(hr, 0.001)
-    local lower95 = round(lo, 0.001)
-    local upper95 = round(hi, 0.001)
-    local pvalue = round(pv, 0.00001)
+    local hazardratio = round(hr, 0.0001)
+    local lower95 = round(lo, 0.0001)
+    local upper95 = round(hi, 0.0001)
+    local pvalue = round(pv, 0.0001)
 
     **Post model results
     post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`hazardratio') (`lower95') (`upper95') (`pvalue')	
@@ -455,14 +455,14 @@ program define cox_model_mi, rclass
 	**Check model ran
 	return scalar model_ok = 1
 	
-	**Number of patients used in MI model
-	local n_patients = round(e(N_mi), 5)
-	
-	**Other descriptive counts left missing for MI rows for now
-	local n_practices = .
-	local n_events = .
-	local person_years = .
-	local df = .
+	**MI model sample descriptors, rounded to nearest 5
+	local n_patients  = round(e(N_mi), 5)
+	local n_practices = round(e(N_clust), 5)
+	local n_events   = round(e(N_fail), 5)
+	local person_years = round(e(risk), 5)
+
+	**Model degrees of freedom, consistent with ordinary Cox rows
+	local df = e(df_m)
 	
 	**Strip factor prefix from focal predictor
 	local focalvar "`focal_predictor'"
@@ -585,10 +585,10 @@ program define cox_model_mi, rclass
 		scalar lo = exp(b - crit*se)
 		scalar hi = exp(b + crit*se)
 
-		local hazardratio = round(hr, 0.001)
-		local lower95 = round(lo, 0.001)
-		local upper95 = round(hi, 0.001)
-		local pvalue = round(pv, 0.00001)
+		local hazardratio = round(hr, 0.0001)
+		local lower95 = round(lo, 0.0001)
+		local upper95 = round(hi, 0.0001)
+		local pvalue = round(pv, 0.0001)
 
 		**Post pooled MI results to same Cox output
 		post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`hazardratio') (`lower95') (`upper95') (`pvalue')
@@ -744,10 +744,10 @@ program define competing_risk_model, rclass
 		scalar hi = exp(b + invnormal(0.975)*se)
 		scalar pv = 2*normal(-abs(b/se))
 
-		local subhazardratio = round(shr, 0.001)
-		local lower95 = round(lo, 0.001)
-		local upper95 = round(hi, 0.001)
-		local pvalue = round(pv, 0.00001)
+		local subhazardratio = round(shr, 0.0001)
+		local lower95 = round(lo, 0.0001)
+		local upper95 = round(hi, 0.0001)
+		local pvalue = round(pv, 0.0001)
 
 		**Post model results
 		post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`subhazardratio') (`lower95') (`upper95') (`pvalue')
@@ -785,24 +785,25 @@ egen censor_date_death = rowmin(`study_end_date' `dereg_date')
 format censor_date_death %td
 
 **Primary exposure variable
-local exposure_primary_360 urate_12m_ult //urate checked and target attained vs. not attained within 12 months of ULT initiation (coded as 1/0/missing)
+local primary_exposure urate_12m_ult_recode //urate recoded as not attained if urate not checked (coded as 1/0)
 
 **Sensitivity exposure variables
-local exposure_sens_codemiss urate_12m_ult_cat //separate category coded if urate not checked (1/0/9)
-local exposure_sens_nomiss urate_12m_ult_recode //recoded as not attained if urate not checked (coded as 1/0)
+local exposure_complete_360 urate_12m_ult //urate checked and target attained vs. not attained within 12 months of ULT initiation (coded as 1/0/missing)
+local exposure_sens_misscat urate_12m_ult_cat //separate category coded if urate not checked (1/0/9)
 local exposure_sens_300 urate_300_12m_ult
 local exposure_sens_300_360 urate_targets_12m_ult
 
 **Define exposure list to loop through
-local exposures `exposure_sens_nomiss'
-*`exposure_primary_360'  `exposure_sens_codemiss' `exposure_sens_300' `exposure_sens_300_360'
+local secondary_exposures `exposure_complete_360'  `exposure_sens_misscat' `exposure_sens_300' `exposure_sens_300_360'
+*local exposures `primary_exposure' `secondary_exposures'
+local exposures `primary_exposure'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
 format sec_ckd_egfr_land_date %td
 label var sec_ckd_egfr_land_date "Incident CKD by two eGFRs <60 after ULT landmark"
 
-**Sensitivity outcomes
+**Secondary/sensitivity outcomes
 gen first_ckd_egfr_land_date = first_egfr_ckd_date if (first_egfr_ckd_date > `landmark_date') & first_egfr_ckd_date !=. & `landmark_date' !=.
 format first_ckd_egfr_land_date %td
 label var first_ckd_egfr_land_date "Incident CKD by one eGFR <60 after ULT landmark"
@@ -823,8 +824,10 @@ format hernia_land_date %td
 label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 
 **Define outcome list to loop through
-*local outcomes sec_ckd_egfr_land_date first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
-local outcomes sec_ckd_egfr_land_date
+local primary_outcome sec_ckd_egfr_land_date
+local secondary_outcomes first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
+*local outcomes `primary_outcome' `secondary_outcomes'
+local outcomes `primary_outcome'
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -837,11 +840,16 @@ local patient_predictors_core ///
 	
 local patient_predictors_extra ///
 	urate_before_ult_value egfr_before_ult_value
+	
+***For BMI, combine obesity categories due to sparse data for Obese III
+replace bmicat = 4 if inlist(bmicat, 5, 6)
+label define bmicat_lab 1 "Underweight" 2 "Normal weight" 3 "Overweight" 4 "Obese" 9 "Missing", replace
+label values bmicat bmicat_lab
 
 ***Recode categorised missing covariates as missing	
 foreach var in imd ethnicity bmicat smoke {
     replace `var' = . if `var' == 9
-}	
+}
 	
 *Run landmark Cox models =======================================================
 
@@ -1063,9 +1071,16 @@ foreach outcome of local outcomes {
 			**Temporarily reset survival data using truncated follow-up
 			quietly stset `stop_truncated', failure(`fail_truncated' == 1)
 			
+			/*
 			**X-axis
 			quietly summarize _t if !missing(`exposure') & _st==1 & _t>0, meanonly
 			local log_xmin = max(-2, floor(ln(r(min))))
+			local log_xmax = ceil(ln(r(max)))
+			*/
+			
+			**X-axis: include all positive follow-up times
+			quietly summarize _t if !missing(`exposure') & _st==1 & _t>0, meanonly
+			local log_xmin = floor(ln(r(min)))
 			local log_xmax = ceil(ln(r(max)))
 
 			capture noisily stphplot if !missing(`exposure') & _st==1, by(`exposure') `loglog_plotopts' ytitle("log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax')) xlabel(`log_xmin'(1)`log_xmax', nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
@@ -1089,74 +1104,71 @@ foreach outcome of local outcomes {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
 
-		****Run multiply imputed models
-		
-		**Temporarily save current analysis dataset
-		tempfile pre_mi
-		quietly save `pre_mi'
-		
-		**Restrict to current exposure analysis population
-		keep if !missing(`exposure')
-
-		**Generate Nelson-Aalen cumulative hazard for imputation model
-		capture drop na_hazard
-		sts generate na_hazard = na
-
-		**Convert to MI data
-		mi set mlong
-
-		**Register variables to be imputed
-		mi register imputed imd ethnicity bmicat smoke urate_before_ult_value egfr_before_ult_value
-
-		**Register regular variables
-		mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
-		
-		log on
-
-		**Multiple imputation by chained equations
-		capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) noisily
-		
-		**Skip MI models if imputation fails
-		local mi_rc = _rc
-
-		if `mi_rc' {
-			di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
-			quietly use `pre_mi', clear
+		****Run multiply imputed models for key outcomes and exposures only 
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
-			tab bmicat if !missing(`exposure'), missing //remove later
+			**Temporarily save current analysis dataset
+			tempfile pre_mi
+			quietly save `pre_mi'
+			
+			**Restrict to current exposure analysis population
+			keep if !missing(`exposure')
+
+			**Generate Nelson-Aalen cumulative hazard for imputation model
+			capture drop na_hazard
+			sts generate na_hazard = na
+
+			**Convert to MI data
+			mi set mlong
+
+			**Register variables to be imputed
+			mi register imputed imd ethnicity bmicat smoke urate_before_ult_value egfr_before_ult_value
+
+			**Register regular variables
+			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
+			
+			log on
+
+			**Multiple imputation by chained equations
+			capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) noisily
+			
+			**Skip MI models if imputation fails
+			local mi_rc = _rc
+
+			if `mi_rc' {
+				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
+				quietly use `pre_mi', clear	
+				log off
+				continue
+			}
+
+			di as result "MI imputation completed: `outcome' / `exposure'"
+			mi describe
+			
+			log off
+
+			**Set survival data for MI analysis
+			mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
+
+			**MI multivariable core model
+			*local model_terms i.`exposure' `patient_predictors_core'
+			*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
+
+			log on
+			
+			**MI multivariable model including baseline urate and eGFR
+			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
+			cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
+			
 			log off
 			
-			continue
+			**Restore dataset before MI
+			quietly use `pre_mi', clear
+			
+			log on
+			tab bmicat if !missing(`exposure'), missing //remove later
+			log off
 		}
-
-		di as result "MI imputation completed: `outcome' / `exposure'"
-		mi describe
-		
-		log off
-
-		**Set survival data for MI analysis
-		mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
-
-		**MI multivariable core model
-		*local model_terms i.`exposure' `patient_predictors_core'
-		*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
-
-		log on
-		
-		**MI multivariable model including baseline urate and eGFR
-		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
-		cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
-		
-		log off
-		
-		**Restore dataset before MI
-		quietly use `pre_mi', clear
-		
-		log on
-		
-		tab bmicat if !missing(`exposure'), missing //remove later
-		
-		log off
 	}
 }
 	
@@ -1177,10 +1189,9 @@ if _rc {
 	gen str1 outcome = ""
 }
 
-format hazardratio lower95 upper95 %9.3f
-format pvalue %9.4f
+format hazardratio lower95 upper95 pvalue %12.4f
 
-export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace
+export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace datafmt
 
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
