@@ -794,8 +794,8 @@ local exposure_sens_300 urate_300_12m_ult
 local exposure_sens_300_360 urate_targets_12m_ult
 
 **Define exposure list to loop through
-local exposures `exposure_primary_360' `exposure_sens_nomiss'
-*`exposure_sens_codemiss' `exposure_sens_300' `exposure_sens_300_360'
+local exposures `exposure_sens_nomiss'
+*`exposure_primary_360'  `exposure_sens_codemiss' `exposure_sens_300' `exposure_sens_300_360'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
@@ -824,7 +824,7 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 
 **Define outcome list to loop through
 *local outcomes sec_ckd_egfr_land_date first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
-local outcomes sec_ckd_egfr_land_date death_land_date hernia_land_date
+local outcomes sec_ckd_egfr_land_date
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1114,7 +1114,7 @@ foreach outcome of local outcomes {
 		log on
 
 		**Multiple imputation by chained equations
-		capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) rseed(12345) noisily
+		capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) noisily
 		
 		**Skip MI models if imputation fails
 		local mi_rc = _rc
