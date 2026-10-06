@@ -756,19 +756,20 @@ program define competing_risk_model, rclass
 
 		capture scalar se = _se[`term']
 		if _rc continue
-		if missing(se) continue
-		if se == 0 continue
+
+		if missing(scalar(se)) continue
+		if scalar(se) == 0 continue
 
 		**Calculate subhazard ratio, CI and p-value
-		scalar shr = exp(b)
-		scalar lo = exp(b - invnormal(0.975)*se)
-		scalar hi = exp(b + invnormal(0.975)*se)
-		scalar pv = 2*normal(-abs(b/se))
+		scalar shr = exp(scalar(b))
+		scalar lo = exp(scalar(b) - invnormal(0.975)*scalar(se))
+		scalar hi = exp(scalar(b) + invnormal(0.975)*scalar(se))
+		scalar pv = 2*normal(-abs(scalar(b)/scalar(se)))
 
-		local subhazardratio = round(shr, 0.0001)
-		local lower95 = round(lo, 0.0001)
-		local upper95 = round(hi, 0.0001)
-		local pvalue = round(pv, 0.0001)
+		local subhazardratio = round(scalar(shr), 0.0001)
+		local lower95 = round(scalar(lo), 0.0001)
+		local upper95 = round(scalar(hi), 0.0001)
+		local pvalue = round(scalar(pv), 0.0001)
 
 		**Post model results
 		post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`subhazardratio') (`lower95') (`upper95') (`pvalue')
@@ -1311,32 +1312,65 @@ foreach outcome of local outcomes {
 			
 			*****Log-log plot truncated at latest non-redacted time (Default: no log-log graph produced)
 				
-			**Store truncated follow-up in years
+			*****Store truncated follow-up in years
 			tempvar stop_truncated fail_truncated
 
 			gen double `stop_truncated' = min(_t, `km_tmax')
 			gen byte `fail_truncated' = _d == 1 & _t <= `km_tmax'
 
-			**Temporarily reset survival data using truncated follow-up
+			*****Temporarily reset survival data using truncated follow-up
 			quietly stset `stop_truncated', failure(`fail_truncated' == 1)
 			
-			**X-axis formatting
+			*****Generate survival estimates using the full eligible population
+			tempvar km_surv log_time loglog_surv
+
+			quietly sts generate `km_surv' = s if !missing(`exposure') & _st == 1, by(`exposure')
+
+			gen double `log_time' = ln(_t) if !missing(`exposure') & _st == 1 & _t > 0
+
+			gen double `loglog_surv' = -ln(-ln(`km_surv')) if `km_surv' > 0 & `km_surv' < 1
+
 			local loglog_graph_ok = 0
 
-			**Check for events within truncated follow-up
-			quietly summarize _t if !missing(`exposure') & _st == 1 & _d == 1 & _t > 0, meanonly
+			*****Set axis limits from values that can actually be plotted
+			quietly summarize `log_time' if !missing(`log_time', `loglog_surv'), meanonly
 
 			if r(N) > 0 {
-				local log_xmin = floor(ln(r(min)))
-				quietly summarize _t if !missing(`exposure') & _st == 1 & _t > 0, meanonly
-				local log_xmax = ceil(ln(r(max)))
 
-				capture noisily stphplot if !missing(`exposure') & _st==1, by(`exposure') `loglog_plotopts' ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax')) xlabel(`log_xmin'(1)`log_xmax', nogrid labsize(small)) title("", size(medium) margin(b=2)) legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
+				local log_xmin = r(min)
+				local log_xmax = r(max)
+				local tick_min = ceil(`log_xmin')
+				local tick_max = floor(`log_xmax')
+
+				**Build one curve per exposure category
+				local ll_plots
+				local i = 1
+
+				foreach l of local levels {
+
+					local col : word `i' of `colours'
+					if "`col'" == "" local col "black"
+
+					local ll_plots `"`ll_plots' (line `loglog_surv' `log_time' if `exposure' == `l' & !missing(`log_time', `loglog_surv'), sort lcolor(`col') lpattern(solid))"'
+
+					local ++i
+				}
+
+				*****Use integer ticks where available
+				local ll_ticks
+				if `tick_min' <= `tick_max' {
+					local ll_ticks "`tick_min'(1)`tick_max'"
+				}
+
+				capture noisily twoway `ll_plots', ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax') noextend) xlabel(`ll_ticks', nogrid labsize(small)) plotregion(margin(zero)) title("") legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) ///
+					saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
 
 				local loglog_graph_ok = (_rc == 0)
 			}
+
+			drop `km_surv' `log_time' `loglog_surv'
 			
-			**Restore original survival settings
+			*****Restore original survival settings
 			stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 			drop `stop_truncated' `fail_truncated'
 
@@ -1351,7 +1385,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-/*
+
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
@@ -1393,10 +1427,6 @@ foreach outcome of local outcomes {
 			
 			**Set survival data for MI analysis
 			mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
-
-			**MI multivariable core model
-			*local model_terms i.`exposure' `patient_predictors_core'
-			*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
 			
 			**MI multivariable model including baseline urate and eGFR
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
@@ -1405,7 +1435,6 @@ foreach outcome of local outcomes {
 			**Restore dataset before MI
 			quietly use `pre_mi', clear
 		}
-		*/
 	}
 }
 	
