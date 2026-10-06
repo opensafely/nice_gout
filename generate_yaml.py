@@ -283,6 +283,7 @@ yaml_footer = f"""
         table1: output/tables/landmark_cox_summary.csv
         table2: output/tables/landmark_cox_risk_table.csv
         table3: output/tables/landmark_cox_absrisk.csv
+        table4: output/tables/landmark_cox_ph.csv
         figure1: output/figures/km_*.svg
         figure2: output/figures/loglog_*.svg
 
