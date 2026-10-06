@@ -408,11 +408,11 @@ label variable landmark_12m_fup "Available follow-up after landmark"
 
 **Categorical adjustment variables of interest
 local categorical_vars ///
-	sex imd ethnicity bmicat smoke diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land landmark_12m_fup 
+	landmark_12m_fup ace_arb_land sglt2_land diuretic_land alcohol_land hypertension_land cva_land chd_land heart_failure_land diabetes_land smoke bmicat ethnicity imd sex               
 
 **Continuous adjustment variables of interest
 local continuous_vars ///
-    age_land_decile urate_before_ult_value egfr_before_ult_value
+     urate_before_ult_value egfr_before_ult_value age_land
 	
 local baseline_cohort "$projectdir/output/data/baseline_landmark_cohort.dta"
 local baseline_results "$projectdir/output/data/summary_table_`cohort'.dta"

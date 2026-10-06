@@ -776,6 +776,224 @@ program define competing_risk_model, rclass
 
 end
 
+*Competing risk models (stcrprep) =========================*/
+capture program drop competing_risk_model_stc
+
+program define competing_risk_model_stc, rclass
+
+	**Model arguments
+    args model_terms focal_predictor outcome outlabel model_label compete_var
+
+    **Save original patient-level dataset and survival settings
+    tempfile fg_original
+    quietly save "`fg_original'"
+
+    log on
+    di as text "Fine-Gray START: `c(current_date)' `c(current_time)'"
+
+    **Prepare data and fit model; capture errors so data can be restored
+    capture noisily {
+
+        which stcrprep
+
+        **Underlying variables for current main-effect model (model_terms must contain covariates only, without an if qualifier)
+        local fg_vars = subinstr("`model_terms'", "i.", "", .)
+        local fg_vars = subinstr("`fg_vars'", "c.", "", .)
+        local fg_vars : list uniq fg_vars
+
+        **Restrict to the complete-case analysis population
+        keep if _st == 1
+
+        foreach v of local fg_vars {
+            quietly drop if missing(`v')
+        }
+
+        quietly drop if missing(practice_id)
+
+        **Current implementation assumes one record per patient, with follow-up starting at landmark (analysis time zero)
+        isid patient_id
+        assert _t0 == 0
+        assert !missing(`compete_var')
+        assert _d == 0 if `compete_var' == 1
+
+        **Store actual sample descriptors before expansion
+        quietly count
+        local n_patients = round(r(N), 5)
+
+        tempvar fg_practice_tag
+        egen `fg_practice_tag' = tag(practice_id)
+        quietly count if `fg_practice_tag' == 1
+        local n_practices = round(r(N), 5)
+
+        quietly count if _d == 1
+        local n_events = round(r(N), 5)
+
+        quietly summarize _t, meanonly
+        local person_years = round(r(sum), 5)
+
+        **Event type: 0=censored, 1=CKD, 2=competing death
+        tempvar fg_status fg_time
+        gen byte `fg_status' = 0
+        replace `fg_status' = 1 if _d == 1
+        replace `fg_status' = 2 if `compete_var' == 1
+
+        gen double `fg_time' = _t
+
+        **Initial stset must identify all event types and patient ID
+        quietly stset `fg_time', failure(`fg_status' == 1 2) id(patient_id)
+
+        **Expand data for CKD only and calculate censoring weights
+        stcrprep, events(`fg_status') trans(1) keep(`fg_vars' practice_id)
+
+        **Identify the event of interest in expanded data
+        tempvar fg_event
+        gen byte `fg_event' = (failcode == `fg_status')
+
+        **Weighted intervals: retain years as the time unit
+        quietly stset tstop [pw=weight_c], enter(time tstart) failure(`fg_event' == 1)
+
+        di as text "Weighted Cox START: `c(current_date)' `c(current_time)'"
+
+        **This weighted Cox fit estimates Fine-Gray subhazard ratios
+        stcox `model_terms', vce(cluster practice_id) breslow log iterate(20)
+
+        **Do not post results from an unconverged model
+        if e(converged) != 1 {
+            error 430
+        }
+
+        local df = e(df_m)
+    }
+
+    local fg_rc = _rc
+
+    di as text "Fine-Gray END: `c(current_date)' `c(current_time)'"
+    di as text "Fine-Gray return code: `fg_rc'"
+    log off
+
+    if `fg_rc' {
+        quietly use "`fg_original'", clear
+        return scalar model_ok = 0
+        exit
+    }
+
+	**Strip factor prefix from focal predictor
+	local focalvar "`focal_predictor'"
+	local focalvar = subinstr("`focalvar'", "i.", "", .)
+	local focalvar = subinstr("`focalvar'", "c.", "", .)
+
+	**Store outputs from model
+	matrix B = e(b)
+	local cnames : colnames B
+
+	**Cycle through column names
+	foreach term of local cnames {
+
+		**Skip intercepts
+		if "`term'" == "_cons" continue
+
+		**Store defaults
+		local varname "`term'"
+		local category "Continuous"
+		local levelnum ""
+		local omitted = 0
+		local base = 0
+
+		**Handle omitted terms
+		if regexm("`term'", "^([0-9]+)o\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname "`=regexs(2)'"
+			local omitted = 1
+		}
+		else if regexm("`term'", "^o\.(.+)$") {
+			local varname "`=regexs(1)'"
+			local category "Omitted"
+			local omitted = 1
+		}
+
+		**Handle base factor terms
+		else if regexm("`term'", "^([0-9]+)b\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname "`=regexs(2)'"
+			local base = 1
+		}
+
+		**Handle regular factor terms
+		else if regexm("`term'", "^([0-9]+)([a-z]*)\.(.+)$") {
+			local levelnum "`=regexs(1)'"
+			local varname "`=regexs(3)'"
+		}
+
+		**Store factor level label
+		if "`levelnum'" != "" {
+			local labname : value label `varname'
+
+			if "`labname'" != "" {
+				capture local category : label `labname' `levelnum'
+				if _rc local category "`levelnum'"
+			}
+			else {
+				local category "`levelnum'"
+			}
+		}
+
+		**Annotate omitted terms
+		if `omitted' == 1 {
+			if "`category'" == "Continuous" local category "Omitted"
+			else local category "`category' (omitted)"
+		}
+
+		**Restrict output to focal predictor
+		if "`focalvar'" != "" {
+			if "`varname'" != "`focalvar'" continue
+		}
+
+		**Store variable label
+		local varlabel : variable label `varname'
+		if "`varlabel'" == "" local varlabel "`varname'"
+
+		**Post omitted terms
+		if `omitted' == 1 {
+			post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (.) (.) (.) (.)
+			continue
+		}
+
+		**Post reference category
+		if `base' == 1 {
+			post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (1) (.) (.) (.)
+			continue
+		}
+
+		**Extract coefficient and SE
+		capture scalar b = _b[`term']
+		if _rc continue
+
+		capture scalar se = _se[`term']
+		if _rc continue
+		if missing(se) continue
+		if se == 0 continue
+
+		**Calculate subhazard ratio, CI and p-value
+		scalar shr = exp(b)
+		scalar lo = exp(b - invnormal(0.975)*se)
+		scalar hi = exp(b + invnormal(0.975)*se)
+		scalar pv = 2*normal(-abs(b/se))
+
+		local subhazardratio = round(shr, 0.0001)
+		local lower95 = round(lo, 0.0001)
+		local upper95 = round(hi, 0.0001)
+		local pvalue = round(pv, 0.0001)
+
+		**Post model results
+		post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`subhazardratio') (`lower95') (`upper95') (`pvalue')
+	}
+	
+	**Restore patient-level data and original survival settings
+    quietly use "`fg_original'", clear
+
+    return scalar model_ok = 1
+end
+
 *Load processed cohort ================================
 use "$projectdir/output/data/cohort_processed.dta", clear
 
@@ -1004,10 +1222,17 @@ foreach outcome of local outcomes {
 		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'")
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"' "`run_ph'"
 
-		****Run Fine-Gray competing-risk models  for primary model
+		/****Run Fine-Gray competing-risk models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
 				competing_risk_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
+		}
+		*/
+		
+	    ****Run Fine-Gray competing-risk models (stcprep) for primary model
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
+			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
+				competing_risk_model_stc `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
 		}
 		
 		****Output KM and loglog plots
@@ -1126,7 +1351,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-
+/*
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
@@ -1150,8 +1375,6 @@ foreach outcome of local outcomes {
 			**Register regular variables
 			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
 			
-			log on
-
 			**Multiple imputation by chained equations
 			capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) noisily
 			
@@ -1168,30 +1391,21 @@ foreach outcome of local outcomes {
 			di as result "MI imputation completed: `outcome' / `exposure'"
 			mi describe
 			
-			log off
-
 			**Set survival data for MI analysis
 			mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 
 			**MI multivariable core model
 			*local model_terms i.`exposure' `patient_predictors_core'
 			*cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable core"'
-
-			log on
 			
 			**MI multivariable model including baseline urate and eGFR
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 			cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
-			
-			log off
-			
+						
 			**Restore dataset before MI
 			quietly use `pre_mi', clear
-			
-			log on
-			tab bmicat if !missing(`exposure'), missing //remove later
-			log off
 		}
+		*/
 	}
 }
 	
