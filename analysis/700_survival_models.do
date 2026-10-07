@@ -124,6 +124,10 @@ program define cox_model, rclass
 
     if `ph_plot_rc' == 0 {
 		capture noisily graph export "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", name(ph_exposure_plot) replace
+		 
+		if _rc == 0 {
+            global n_schoenfeld_graphs = $n_schoenfeld_graphs + 1
+        }
 	}
     else {
         di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
@@ -977,6 +981,7 @@ use "$projectdir/output/data/cohort_processed.dta", clear
 
 local n_km_graphs = 0
 local n_loglog_graphs = 0
+local n_schoenfeld_graphs = 0
 
 capture erase "$projectdir/output/figures/km_no_outputs.$img"
 capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
@@ -1515,6 +1520,22 @@ if `n_loglog_graphs' == 0 {
     twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("No log-log estimates available") legend(off)
 
     graph export "$projectdir/output/figures/loglog_no_outputs.$img", replace
+    restore
+}
+
+**Create dummy Schoenfeld figures in none were exported
+local schoenfeld_files : dir "$projectdir/output/figures" files "schoenfeld_*.$img"
+
+if `n_schoenfeld_graphs' == 0 {
+    preserve
+    clear
+    set obs 1
+    gen x = 1
+    gen y = 1
+
+    twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Schoenfeld diagnostic unavailable") legend(off)
+
+    graph export "$projectdir/output/figures/schoenfeld_no_outputs.$img", replace
     restore
 }
 
