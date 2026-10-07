@@ -79,24 +79,56 @@ program define cox_model, rclass
 	**Global proportional hazards test for primary fully adjusted model
 	if "`run_ph'" == "1" {
 
-		local ph_exposure = subinstr("`focal_predictor'", "i.", "", .)
+    local ph_exposure = subinstr("`focal_predictor'", "i.", "", .)
 
-		capture quietly estat phtest
-		local ph_rc = _rc
+    capture quietly estat phtest, detail
+    local ph_rc = _rc
 
-		local ph_chi2 = .
-		local ph_df = .
-		local ph_pvalue = .
+    if `ph_rc' == 0 {
 
-		if `ph_rc' == 0 {
-			local ph_chi2 = r(chi2)
-			local ph_df = r(df)
-			local ph_pvalue = chi2tail(`ph_df', `ph_chi2')
-		}
+        **Store results before any other commands overwrite r()
+        local ph_chi2 = r(chi2)
+        local ph_df = r(df)
+        local ph_pvalue = chi2tail(`ph_df', `ph_chi2')
 
-		post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") (`ph_chi2') (`ph_df') (`ph_pvalue') (`ph_rc')
+        tempname PH
+        matrix `PH' = r(phtest)
+
+        **Global test
+        post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") ("Global") (`ph_chi2') (`ph_df') (`ph_pvalue') (0)
+
+        **Separate test for each coefficient
+        local ph_terms : rownames `PH'
+        local j = 0
+
+        foreach ph_term of local ph_terms {
+            local ++j
+
+            local ph_chi2 = `PH'[`j', 2]
+            local ph_df = `PH'[`j', 3]
+            local ph_pvalue = `PH'[`j', 4]
+
+            post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") ("`ph_term'") (`ph_chi2') (`ph_df') (`ph_pvalue') (0)
+        }
+    }
+    else {
+        post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") ("Global") (.) (.) (.) (`ph_rc')
+    }
+	
+	**Adjusted exposure diagnostic: smoothed scaled Schoenfeld residuals
+	
+    **Hide individual residual points
+    capture noisily estat phtest, plot(1.`ph_exposure') msymbol(i) lineopts(lcolor(navy) lwidth(medthick)) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) title("") legend(off) name(ph_exposure_plot, replace)
+
+    local ph_plot_rc = _rc
+
+    if `ph_plot_rc' == 0 {
+		capture noisily graph export "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", name(ph_exposure_plot) replace
 	}
-
+    else {
+        di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
+    }
+}
 	**Check to ensure model ran ok
 	return scalar model_ok = 1
 	
@@ -483,7 +515,7 @@ program define cox_model_mi, rclass
 	local person_years = round(e(risk), 5)
 
 	**Model degrees of freedom, consistent with ordinary Cox rows
-	local df = e(df_r_mi)
+	local df = e(df_m_mi)
 	
 	**Strip factor prefix from focal predictor
 	local focalvar "`focal_predictor'"
@@ -629,9 +661,6 @@ program define competing_risk_model_stc, rclass
     tempfile fg_original
     quietly save "`fg_original'"
 
-    log on
-    di as text "Fine-Gray START: `c(current_date)' `c(current_time)'"
-
     **Prepare data and fit model; capture errors so data can be restored
     capture noisily {
 
@@ -679,6 +708,21 @@ program define competing_risk_model_stc, rclass
         replace `fg_status' = 2 if `compete_var' == 1
 
         gen double `fg_time' = _t
+		
+		**Check actual follow-up before stcrprep expands the data
+        local fg_exposure = subinstr("`focal_predictor'", "i.", "", .)
+        local fg_exposure = subinstr("`fg_exposure'", "c.", "", .)
+
+        local fg_cif_ok = 1
+
+        quietly count if !inlist(`fg_exposure', 0, 1)
+        if r(N) > 0 local fg_cif_ok = 0
+
+        **Require at least 8 patients still at risk at 5 years in each group
+        foreach a in 0 1 {
+            quietly count if `fg_exposure' == `a' & _t >= 5
+            if r(N) < 8 local fg_cif_ok = 0
+        }
 
         **Initial stset must identify all event types and patient ID
         quietly stset `fg_time', failure(`fg_status' == 1 2) id(patient_id)
@@ -707,10 +751,6 @@ program define competing_risk_model_stc, rclass
     }
 
     local fg_rc = _rc
-
-    di as text "Fine-Gray END: `c(current_date)' `c(current_time)'"
-    di as text "Fine-Gray return code: `fg_rc'"
-    log off
 
     if `fg_rc' {
         quietly use "`fg_original'", clear
@@ -830,6 +870,102 @@ program define competing_risk_model_stc, rclass
 		post $cox_measures ("`outcome'") ("`outlabel'") ("`varlabel'") ("`category'") ("`model_label'") (`n_patients') (`n_practices') (`n_events') (`person_years') (`df') (`subhazardratio') (`lower95') (`upper95') (`pvalue')
 	}
 	
+	**Standardised five-year CKD cumulative incidence, accounting for competing death using the fitted Fine-Gray model
+    local fg_risk0 = .
+    local fg_risk1 = .
+    local fg_rd = .
+
+    if `fg_cif_ok' {
+        tempvar fg_sample fg_tag fg_h0 fg_original_exposure fg_xb fg_risk
+
+        log on
+
+        capture noisily {
+            **Freeze estimation sample
+            gen byte `fg_sample' = e(sample)
+
+            **Each patient contributes once to standardisation
+            egen byte `fg_tag' = tag(patient_id) if `fg_sample' == 1
+
+            quietly count if `fg_tag' == 1
+            local fg_n_standardise = r(N)
+
+            **Estimate baseline cumulative subhazard before changing exposure
+            quietly predict double `fg_h0' if `fg_sample' == 1, basechazard
+
+            **Baseline cumulative subhazard at 5 years
+            local fg_h0_5 = 0
+
+            quietly count if `fg_sample' == 1 & _d == 1 & _t <= 5
+            if r(N) > 0 {
+                quietly summarize `fg_h0' if `fg_sample' == 1 & _d == 1 & _t <= 5, meanonly
+
+                local fg_h0_5 = r(max)
+
+                if missing(`fg_h0_5') {
+                    error 498
+                }
+            }
+
+            **Store observed exposure
+            gen double `fg_original_exposure' = `focalvar'
+
+            foreach a in 0 1 {
+
+                **Predict under the same exposure value for everyone
+                quietly replace `focalvar' = `a' if `fg_sample' == 1
+
+                quietly predict double `fg_xb' if `fg_tag' == 1, xb
+
+                **Fine-Gray cumulative incidence at 5 years
+                gen double `fg_risk' = 1 - exp(-`fg_h0_5' * exp(`fg_xb')) if `fg_tag' == 1
+
+                **Ensure no patients are silently excluded from the average
+                assert !missing(`fg_risk') if `fg_tag' == 1
+                assert inrange(`fg_risk', 0, 1) if `fg_tag' == 1
+
+                quietly summarize `fg_risk' if `fg_tag' == 1, meanonly
+                assert r(N) == `fg_n_standardise'
+
+                local fg_risk`a' = 100 * r(mean)
+
+                drop `fg_xb' `fg_risk'
+            }
+
+            **Restore observed exposure values
+            quietly replace `focalvar' = `fg_original_exposure'
+
+            **Difference in percentage points: attained minus not attained
+            local fg_rd = `fg_risk1' - `fg_risk0'
+        }
+
+        local fg_cif_rc = _rc
+
+        if `fg_cif_rc' {
+            di as error "Fine-Gray absolute-risk calculation failed; return code `fg_cif_rc'"
+            local fg_risk0 = .
+            local fg_risk1 = .
+            local fg_rd = .
+        }
+
+        log off
+    }
+
+    **Exposure labels, with numeric fallback
+    local fg_label0 "0"
+    local fg_label1 "1"
+    local fg_vallab : value label `focalvar'
+
+    if "`fg_vallab'" != "" {
+        local fg_label0 : label `fg_vallab' 0
+        local fg_label1 : label `fg_vallab' 1
+    }
+
+    **Post percentages to the existing absolute-risk table
+    post $cox_absrisk ("`outcome'") ("`outlabel'") ("`focalvar'") ("`fg_label0'") ("`fg_label0'") ("`model_label'") ("Adjusted CKD cumulative incidence at 5 years") (`fg_risk0') (.) (.)
+    post $cox_absrisk ("`outcome'") ("`outlabel'") ("`focalvar'") ("`fg_label1'") ("`fg_label0'") ("`model_label'") ("Adjusted CKD cumulative incidence at 5 years") (`fg_risk1') (.) (.)
+    post $cox_absrisk ("`outcome'") ("`outlabel'") ("`focalvar'") ("`fg_label1'") ("`fg_label0'") ("`model_label'") ("Adjusted CKD risk difference at 5 years") (`fg_rd') (.) (.)
+	
 	**Restore patient-level data and original survival settings
     quietly use "`fg_original'", clear
 
@@ -914,22 +1050,15 @@ local outcomes `primary_outcome'
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
 local outcome_free_landmark ckd_free_landmark //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date + 12 months
 
-**Define patient-level predictors
+**Define patient-level predictors //think about whether comorbidities and medications should be pre-ULT or pre-landmark
 local patient_predictors_core ///
     age_land_decile i.sex i.imd i.ethnicity c.bmi_value i.smoke i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land
-    *rheum_appt_n_12m hosp_n_12m creatinine_n_12m
 	
 local patient_predictors_extra ///
 	urate_before_ult_value egfr_before_ult_value
 	
-/***For BMI, combine obesity categories due to sparse data for Obese III
-replace bmicat = 4 if inlist(bmicat, 5, 6)
-label define bmicat_lab 1 "Underweight" 2 "Normal weight" 3 "Overweight" 4 "Obese" 9 "Missing", replace
-label values bmicat bmicat_lab
-*/
-
 ***Recode categorised missing covariates as missing	
-foreach var in imd ethnicity bmicat smoke {
+foreach var in imd ethnicity smoke {
     replace `var' = . if `var' == 9
 }
 	
@@ -957,7 +1086,7 @@ global cox_absrisk `cox_absrisk'
 **Global proportional hazards test results
 tempname cox_ph
 
-postfile `cox_ph' str150 outcome str150 exposure str80 model double chi2 df pvalue int return_code ///
+postfile `cox_ph' str150(outcome exposure) str80(model) str150(term) double chi2 df pvalue return_code ///
     using "$projectdir/output/data/landmark_cox_ph.dta", replace
 
 global cox_ph `cox_ph'
@@ -1219,27 +1348,19 @@ foreach outcome of local outcomes {
 
 			**Register regular variables
 			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
-			
-			log on
-			di as text "MI START: `c(current_date)' `c(current_time)'"
-			
+						
 			**Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
 			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment noisily) ethnicity (mlogit, iterate(20) augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) showevery(1)
 			
 			**Skip MI models if imputation fails
 			local mi_rc = _rc
 			
-			di as text "MI Imputation END: `c(current_date)' `c(current_time)'"
-			tab ethnicity
-
 			if `mi_rc' {
 				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
 				quietly use `pre_mi', clear	
-				log off
 				continue
 			}
 
-			di as result "MI imputation completed: `outcome' / `exposure'"
 			mi describe
 			
 			**Set survival data for MI analysis
@@ -1251,9 +1372,6 @@ foreach outcome of local outcomes {
 						
 			**Restore dataset before MI
 			quietly use `pre_mi', clear
-			
-			di as text "MI END: `c(current_date)' `c(current_time)'"
-			log off
 		}
 	}
 }
