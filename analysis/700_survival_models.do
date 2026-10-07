@@ -1205,6 +1205,10 @@ foreach outcome of local outcomes {
 			**Generate Nelson-Aalen cumulative hazard for imputation model
 			capture drop na_hazard
 			sts generate na_hazard = na
+			
+			**Ensure consistent patient order
+			isid patient_id
+			sort patient_id
 
 			**Convert to MI data
 			mi set mlong
@@ -1218,11 +1222,14 @@ foreach outcome of local outcomes {
 			log on
 			di as text "MI START: `c(current_date)' `c(current_time)'"
 			
-			**Multiple imputation by chained equations
-			capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) noisily
+			**Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
+			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment) ethnicity (mlogit, iterate(20) augment) bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) showevery(1)
 			
 			**Skip MI models if imputation fails
 			local mi_rc = _rc
+			
+			di as text "MI Imputation END: `c(current_date)' `c(current_time)'"
+			tab ethnicity
 
 			if `mi_rc' {
 				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
