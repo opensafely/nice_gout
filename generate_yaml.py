@@ -286,6 +286,7 @@ yaml_footer = f"""
         table4: output/tables/landmark_cox_ph.csv
         figure1: output/figures/km_*.svg
         figure2: output/figures/loglog_*.svg
+        figure3: output/figures/schoenfeld_*.svg
 
   generate_notebook:
     run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
