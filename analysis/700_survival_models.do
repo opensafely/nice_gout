@@ -916,16 +916,17 @@ local outcome_free_landmark ckd_free_landmark //CKD, defined using single eGFR <
 
 **Define patient-level predictors
 local patient_predictors_core ///
-    age_land_decile i.sex i.imd i.ethnicity i.bmicat i.smoke i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land
+    age_land_decile i.sex i.imd i.ethnicity c.bmi_value i.smoke i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land
     *rheum_appt_n_12m hosp_n_12m creatinine_n_12m
 	
 local patient_predictors_extra ///
 	urate_before_ult_value egfr_before_ult_value
 	
-***For BMI, combine obesity categories due to sparse data for Obese III
+/***For BMI, combine obesity categories due to sparse data for Obese III
 replace bmicat = 4 if inlist(bmicat, 5, 6)
 label define bmicat_lab 1 "Underweight" 2 "Normal weight" 3 "Overweight" 4 "Obese" 9 "Missing", replace
 label values bmicat bmicat_lab
+*/
 
 ***Recode categorised missing covariates as missing	
 foreach var in imd ethnicity bmicat smoke {
@@ -1214,7 +1215,7 @@ foreach outcome of local outcomes {
 			mi set mlong
 
 			**Register variables to be imputed
-			mi register imputed imd ethnicity bmicat smoke urate_before_ult_value egfr_before_ult_value
+			mi register imputed imd ethnicity bmi_value smoke urate_before_ult_value egfr_before_ult_value
 
 			**Register regular variables
 			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
@@ -1223,7 +1224,7 @@ foreach outcome of local outcomes {
 			di as text "MI START: `c(current_date)' `c(current_time)'"
 			
 			**Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
-			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment) ethnicity (mlogit, iterate(20) augment) bmicat smoke (pmm, knn(5)) urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) showevery(1)
+			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment noisily) ethnicity (mlogit, iterate(20) augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) showevery(1)
 			
 			**Skip MI models if imputation fails
 			local mi_rc = _rc
