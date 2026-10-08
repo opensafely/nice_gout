@@ -117,22 +117,63 @@ program define cox_model, rclass
 	
 	**Adjusted exposure diagnostic: smoothed scaled Schoenfeld residuals
 	
-    **Hide individual residual points
-    capture noisily estat phtest, plot(1.`ph_exposure') msymbol(i) lineopts(lcolor(navy) lwidth(medthick)) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) title("") legend(off) name(ph_exposure_plot, replace)
+    **Latest time with at least 8 patients at risk in every exposure group
+    local ph_tmax 0
+    quietly levelsof `ph_exposure' if e(sample), local(ph_levels)
 
-    local ph_plot_rc = _rc
+    foreach ph_time in 0 1 2 3 4 5 6 7 8 9 10 {
+        local ph_time_ok 1
 
-    if `ph_plot_rc' == 0 {
-		capture noisily graph export "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", name(ph_exposure_plot) replace
-		 
-		if _rc == 0 {
-            global n_schoenfeld_graphs = $n_schoenfeld_graphs + 1
+        foreach ph_level of local ph_levels {
+            quietly count if e(sample) & ///
+                `ph_exposure' == `ph_level' & _t >= `ph_time'
+
+            if r(N) < 8 local ph_time_ok 0
         }
-	}
+        if `ph_time_ok' == 1 local ph_tmax `ph_time'
+    }
+
+    di as text "Adjusted Schoenfeld plot truncated at `ph_tmax' years"
+
+    if `ph_tmax' > 0 {
+
+        **Generate residuals from the full fitted model
+        tempname ph_stub
+
+        capture noisily {
+            quietly predict double `ph_stub'*, scaledsch
+
+            **First residual corresponds to the binary exposure:
+            quietly count if e(sample) & _d == 1 & ///
+                _t <= `ph_tmax' & !missing(`ph_stub'1)
+
+            if r(N) < 2 error 2001
+
+            **Match estat phtest's default smoothing method
+            twoway lowess `ph_stub'1 _t if e(sample) & _d == 1 & _t <= `ph_tmax', mean noweight bwidth(0.8) lcolor(navy) lwidth(medthick) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) xlabel(0(1)`ph_tmax', nogrid labsize(small)) xscale(range(0 `ph_tmax')) title("") legend(off) name(ph_exposure_plot, replace)
+        }
+
+        local ph_plot_rc = _rc
+        capture drop `ph_stub'*
+
+        if `ph_plot_rc' == 0 {
+            capture noisily graph export ///
+                "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", ///
+                name(ph_exposure_plot) replace
+
+            if _rc == 0 {
+                global n_schoenfeld_graphs = $n_schoenfeld_graphs + 1
+            }
+        }
+        else {
+            di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
+        }
+    }
     else {
-        di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
+        di as text "No non-redacted follow-up beyond time zero; skipping Schoenfeld plot."
     }
 }
+
 	**Check to ensure model ran ok
 	return scalar model_ok = 1
 	
@@ -1010,14 +1051,14 @@ local exposure_complete_360 urate_12m_ult //urate checked and target attained vs
 **Sensitivity exposure variables
 local exposure_nomiss_360 urate_12m_ult_recode //urate recoded as not attained if urate not checked (coded as 1/0)
 local exposure_sens_misscat urate_12m_ult_cat //separate category coded if urate not checked (1/0/9)
-local exposure_sens_300 urate_300_12m_ult
 local exposure_sens_300_360 urate_targets_12m_ult
+*local exposure_sens_300 urate_300_12m_ult
 
 **Define exposure list to loop through
 local primary_exposure `exposure_complete_360'
-local secondary_exposures `exposure_nomiss_360'  `exposure_sens_misscat' `exposure_sens_300' `exposure_sens_300_360'
-*local exposures `primary_exposure' `secondary_exposures'
-local exposures `primary_exposure'
+local secondary_exposures `exposure_nomiss_360' `exposure_sens_misscat' `exposure_sens_300_360'
+local exposures `secondary_exposures' `primary_exposure' 
+*local exposures `primary_exposure'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
@@ -1046,8 +1087,8 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 **Define outcome list to loop through
 local primary_outcome sec_ckd_egfr_land_date
 local secondary_outcomes first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
-*local outcomes `primary_outcome' `secondary_outcomes'
-local outcomes `primary_outcome'
+local outcomes `secondary_outcomes' `primary_outcome' 
+*local outcomes `primary_outcome'
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1179,25 +1220,30 @@ foreach outcome of local outcomes {
 			continue
 		}
 
-		****Run univariable model
-		local model_terms i.`exposure' if !missing(`exposure')
-		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted"'
+		****Run univariable model (for primary exposure and outcome only)
+		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+			local model_terms i.`exposure' if !missing(`exposure')
+			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted"'
+		}
 		
-		****Run age and sex-adjusted model
-		local model_terms i.`exposure' age_land_decile i.sex if !missing(`exposure')
-		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age/sex-adjusted"' 
-
-		****Run multivariable model
-		local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
-		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable core"' 
+		****Run age and sex-adjusted model (for primary exposure only)
+		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+			local model_terms i.`exposure' age_land_decile i.sex if !missing(`exposure')
+			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age/sex-adjusted"' 
+		}
 		
-		****Run multivariable model with baseline urate and eGFR (values closest to before ULT initiation, but within 12m); also output PH test for this if it is the primary model
+		****Run multivariable model (for primary exposure and outcome only)
+		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+			local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
+			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable core"' 
+		}
+		
+		****Run multivariable model with baseline urate and eGFR (values closest to before ULT initiation, but within 12m) 
 		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
-		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'")
+		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'") //also output PH test for this if it is the primary model
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"' "`run_ph'"
 		
 		****Run time-split multivariable model with baseline urate and eGFR
-		
 		*****Store whether the preceding primary Cox model succeeded
 		local primary_model_ok = r(model_ok)
 
@@ -1438,7 +1484,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-
+/*
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
@@ -1498,6 +1544,7 @@ foreach outcome of local outcomes {
 			
 			log off
 		}
+		*/
 	}
 }
 	

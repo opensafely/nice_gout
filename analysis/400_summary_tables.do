@@ -372,6 +372,9 @@ capture erase "$projectdir/output/data/summary_table_`cohort'.dta"
 **Load processed dataset
 use "$projectdir/output/data/cohort_processed.dta", clear
 
+***Remove later
+lab var age_land "Age, years"
+
 **Set inclusion criteria, as per landmark criteria
 
 ***Define landmark date
@@ -469,6 +472,64 @@ if _rc == 0 {
 }
 else {
     di as text "No summary table created; skipping export."
+}
+
+*Landmark table for flowchart of eligibility
+
+**Store table name
+local cohort "landmark_inclusion"
+
+**Erase existing output
+local results "$projectdir/output/data/summary_table_`cohort'.dta"
+capture erase "`results'"
+
+**Load processed dataset
+use "$projectdir/output/data/cohort_processed.dta", clear
+
+**Include everyone who started ULT
+keep if !missing(ult_first_date)
+
+**Alive at ULT plus 12 months
+gen alive_landmark = (missing(date_of_death) | date_of_death > ult_landmark) if !missing(ult_landmark)
+
+**Deregistered on or before ULT plus 12 months
+gen deregistered_landmark = (!missing(reg_end_date) & reg_end_date <= ult_landmark) if !missing(ult_landmark)
+
+**CKD at ULT initiation
+gen ckd_baseline = (ckd_free_ult == 0) if !missing(ckd_free_ult)
+
+**CKD free at landmark
+gen ckd_free_at_landmark = ckd_free_landmark if !missing(ult_landmark)
+
+****Meets all inclusion criteria
+gen eligible_landmark = has_12m_fup_ult == 1 & alive_landmark == 1 & deregistered_landmark == 0 & ckd_baseline == 0 & ckd_free_at_landmark == 1
+
+**Labels
+label define inclusion_yesno 0 "No" 1 "Yes", replace
+
+foreach var in alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark eligible_landmark {
+    label values `var' inclusion_yesno
+}
+
+label var alive_landmark "Alive at ULT plus 12 months"
+label var deregistered_landmark "Deregistered by ULT plus 12 months"
+label var ckd_baseline "CKD at ULT initiation"
+label var ckd_free_at_landmark "CKD free at ULT plus 12 months"
+label var eligible_landmark "Meets all landmark inclusion criteria"
+
+**Output each characteristic among all ULT initiators
+foreach var in has_12m_fup_ult alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark eligible_landmark {
+    rounded_categorical `var', outfile("`results'") group("All ULT initiators")
+}
+
+**Export to CSV
+capture confirm file "`results'"
+
+if _rc == 0 {
+    use "`results'", clear
+    order exposure_group variable categories
+
+    export delimited using "$projectdir/output/tables/summary_table_`cohort'.csv", datafmt replace
 }
 
 log close
