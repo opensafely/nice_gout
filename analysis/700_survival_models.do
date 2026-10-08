@@ -484,6 +484,7 @@ program define cox_model, rclass
 
 		drop `focal_original'
 	}
+	return scalar model_ok = 1
 end
 
 *Multiple imputation models =============
@@ -882,8 +883,6 @@ program define competing_risk_model_stc, rclass
     if `fg_cif_ok' {
         tempvar fg_sample fg_tag fg_h0 fg_original_exposure fg_xb fg_risk
 
-        log on
-
         capture noisily {
             **Freeze estimation sample
             gen byte `fg_sample' = e(sample)
@@ -951,8 +950,6 @@ program define competing_risk_model_stc, rclass
             local fg_risk1 = .
             local fg_rd = .
         }
-
-        log off
     }
 
     **Exposure labels, with numeric fallback
@@ -981,10 +978,11 @@ use "$projectdir/output/data/cohort_processed.dta", clear
 
 local n_km_graphs = 0
 local n_loglog_graphs = 0
-local n_schoenfeld_graphs = 0
+global n_schoenfeld_graphs = 0
 
 capture erase "$projectdir/output/figures/km_no_outputs.$img"
 capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
+capture erase "$projectdir/output/figures/schoenfeld_no_outputs.$img"
 
 *Define key variables for landmark survival analysis ===============================================
 
@@ -1198,6 +1196,122 @@ foreach outcome of local outcomes {
 		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'")
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"' "`run_ph'"
 		
+		****Run time-split multivariable model with baseline urate and eGFR
+		
+		*****Store whether the preceding primary Cox model succeeded
+		local primary_model_ok = r(model_ok)
+
+		*****Time-specific HRs: primary outcome and exposure only
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" & `primary_model_ok' == 1 {
+
+			*****Save original data and primary model
+			tempfile before_timesplit
+			quietly save "`before_timesplit'", replace
+
+			tempname primary_estimates
+			estimates store `primary_estimates'
+
+			capture noisily {
+
+				*****Use exactly the primary model's estimation population
+				keep if e(sample)
+				
+				*****Check exposure only 0 or 1
+				assert inlist(`exposure', 0, 1)
+
+				*****Assume one record per patient, starting at landmark
+				isid patient_id
+				assert _t0 == 0
+
+				*****Copy existing analysis time in years and event indicator
+				tempvar ts_time ts_fail ts_band ts_py
+				gen double `ts_time' = _t
+				gen byte `ts_fail' = _d
+
+				*****Declare patient ID and split follow-up
+				quietly stset `ts_time', failure(`ts_fail' == 1) id(patient_id)
+				quietly stsplit `ts_band', at(0 1 3)
+
+				*****Person-time contributed within each interval
+				gen double `ts_py' = _t - _t0
+
+				*****Exposure labels
+				local ts_varlabel : variable label `exposure'
+				if "`ts_varlabel'" == "" local ts_varlabel "`exposure'"
+
+				local ts_category "1"
+				local ts_vallab : value label `exposure'
+				if "`ts_vallab'" != "" {
+					local ts_category : label `ts_vallab' 1
+				}
+
+				foreach band in 0 1 3 {
+
+					local ts_model "Multivariable extra: 0-1 years"
+					if `band' == 1 local ts_model "Multivariable extra: >1-3 years"
+					if `band' == 3 local ts_model "Multivariable extra: >3 years"
+
+					*****Skip intervals with no events
+					quietly count if `ts_band' == `band' & _d == 1
+					if r(N) == 0 continue
+
+					*****Fit the same covariates within this interval
+					capture noisily stcox ib0.`exposure' `patient_predictors_core' `patient_predictors_extra' if `ts_band' == `band', vce(cluster practice_id)
+
+					local ts_fit_rc = _rc
+					if `ts_fit_rc' != 0 {
+						di as error "`ts_model' failed; return code `ts_fit_rc'"
+						continue
+					}
+
+					if e(converged) != 1 {
+						di as error "`ts_model' did not converge"
+						continue
+					}
+
+					*****Extract attainment versus non-attainment coefficient
+					tempname ts_b ts_se
+					capture scalar `ts_b' = _b[1.`exposure']
+					if _rc continue
+
+					capture scalar `ts_se' = _se[1.`exposure']
+					if _rc continue
+					if missing(scalar(`ts_se')) | scalar(`ts_se') == 0 continue
+
+					*****Interval-specific sample descriptors
+					local ts_n = round(e(N), 5)
+					local ts_practices = round(e(N_clust), 5)
+					local ts_df = e(df_m)
+
+					quietly count if e(sample) & _d == 1
+					local ts_events = round(r(N), 5)
+
+					quietly summarize `ts_py' if e(sample), meanonly
+					local ts_personyears = round(r(sum), 5)
+
+					*****HR, 95% CI and p-value
+					local ts_hr = round(exp(scalar(`ts_b')), 0.0001)
+					local ts_lo = round(exp(scalar(`ts_b') - invnormal(0.975)*scalar(`ts_se')), 0.0001)
+					local ts_hi = round(exp(scalar(`ts_b') + invnormal(0.975)*scalar(`ts_se')), 0.0001)
+					local ts_p = round(2*normal(-abs(scalar(`ts_b')/scalar(`ts_se'))), 0.0001)
+
+					*****Append to the existing Cox summary table
+					post $cox_measures ("`outcome'") ("`outlabel'") ("`ts_varlabel'") ("`ts_category'") ("`ts_model'") (`ts_n') (`ts_practices') (`ts_events') (`ts_personyears') (`ts_df') (`ts_hr') (`ts_lo') (`ts_hi') (`ts_p')
+				}
+			}
+
+			local ts_rc = _rc
+
+			*****Restore original patient-level data and primary model
+			quietly use "`before_timesplit'", clear
+			estimates restore `primary_estimates'
+			estimates drop `primary_estimates'
+
+			if `ts_rc' != 0 {
+				di as error "Time-split analysis failed; return code `ts_rc'"
+			}
+		}
+		
 	    ****Run Fine-Gray competing-risk models (stcprep) for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
@@ -1205,8 +1319,6 @@ foreach outcome of local outcomes {
 		}
 		
 		****Output KM and loglog plots
-		
-		*****Store labels for graph
 		levelsof `exposure' if !missing(`exposure') & _st == 1, local(levels)
 
 		local colours "emerald orange red blue dkgreen cranberry navy maroon teal sienna purple"
@@ -1252,7 +1364,7 @@ foreach outcome of local outcomes {
 				}
 			}
 
-			**Update maximum only when all exposure groups are non-redacted
+			*****Update maximum only when all exposure groups are non-redacted
 			if `time_ok' == 1 {
 				local km_tmax `risk_time'
 			}
@@ -1280,40 +1392,40 @@ foreach outcome of local outcomes {
 			
 			*****Log-log plot truncated at latest non-redacted time
 
-			**Store truncated follow-up in years
+			*****Store truncated follow-up in years
 			tempvar stop_truncated fail_truncated
 
-			gen double `stop_truncated' = min(_t, `km_tmax')
-			gen byte `fail_truncated' = _d == 1 & _t <= `km_tmax'
+			gen double `stop_truncated' = min(_t, `km_tmax') if _st == 1
+			gen byte `fail_truncated' = (_d == 1 & _t <= `km_tmax') if _st == 1
 
-			**Temporarily reset survival data using truncated follow-up
+			*****Temporarily reset survival data using truncated follow-up
 			quietly stset `stop_truncated', failure(`fail_truncated' == 1)
 
-			**Default: no log-log graph produced
+			*****Default: no log-log graph produced
 			local loglog_graph_ok = 0
 
-			**Check for events within truncated follow-up
+			*****Check for events within truncated follow-up
 			quietly summarize _t if !missing(`exposure') & _st == 1 & _d == 1 & _t > 0, meanonly
 
 			if r(N) > 0 {
-
+				
+				/*
 				local log_xmin = floor(ln(r(min)))
-
 				quietly summarize _t if !missing(`exposure') & _st == 1 & _t > 0, meanonly
-
 				local log_xmax = ceil(ln(r(max)))
-
-				capture noisily stphplot if !missing(`exposure') & _st == 1, by(`exposure') `loglog_plotopts' ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("log(Time)", size(medsmall) margin(medsmall)) xscale(range(`log_xmin' `log_xmax')) xlabel(`log_xmin'(1)`log_xmax', nogrid labsize(small)) title("") legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
+				*/
+				
+				capture noisily stphplot if !missing(`exposure') & _st == 1, by(`exposure') nolntime `loglog_plotopts' ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `km_tmax')) xlabel(0(1)`km_tmax', nogrid labsize(small)) title("") legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
 
 				local loglog_graph_ok = (_rc == 0)
 			}
 
-			**Restore original survival settings regardless of graph success
+			*****Restore original survival settings regardless of graph success
 			stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 
 			drop `stop_truncated' `fail_truncated'
 
-			**Export only if the graph was created successfully
+			*****Export only if the graph was created successfully
 			if `loglog_graph_ok' {
 
 				capture graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'.$img", name(`loglogname') replace
@@ -1330,53 +1442,61 @@ foreach outcome of local outcomes {
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
-			**Temporarily save current analysis dataset
+			*****Temporarily save current analysis dataset
 			tempfile pre_mi
 			quietly save `pre_mi'
 			
-			**Restrict to current exposure analysis population
+			*****Restrict to current exposure analysis population
 			keep if !missing(`exposure')
 
-			**Generate Nelson-Aalen cumulative hazard for imputation model
+			*****Generate Nelson-Aalen cumulative hazard for imputation model
 			capture drop na_hazard
 			sts generate na_hazard = na
 			
-			**Ensure consistent patient order
+			*****Ensure consistent patient order
 			isid patient_id
 			sort patient_id
 
-			**Convert to MI data
+			*****Convert to MI data
 			mi set mlong
 
-			**Register variables to be imputed
+			*****Register variables to be imputed
 			mi register imputed imd ethnicity bmi_value smoke urate_before_ult_value egfr_before_ult_value
 
-			**Register regular variables
+			*****Register regular variables
 			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
-						
-			**Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
-			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment noisily) ethnicity (mlogit, iterate(20) augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345) showevery(1)
 			
-			**Skip MI models if imputation fails
+			log on
+			di as text "MI START: `c(current_date)' `c(current_time)'"
+						
+			*****Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
+			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment) ethnicity (mlogit, iterate(20) augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345)
+			local mi_rc = _rc
+			di as text "MI END: `c(current_date)' `c(current_time)'"
+			
+			*****Skip MI models if imputation fails
 			local mi_rc = _rc
 			
 			if `mi_rc' {
 				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
 				quietly use `pre_mi', clear	
+				log off
 				continue
 			}
 
 			mi describe
 			
-			**Set survival data for MI analysis
+			*****Set survival data for MI analysis
 			mi stset stop_date, origin(time `landmark_date') scale(365.25) failure(fail == 1)
 			
-			**MI multivariable model including baseline urate and eGFR
+			*****MI multivariable model including baseline urate and eGFR
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 			cox_model_mi `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"MI multivariable extra"'
 						
-			**Restore dataset before MI
+			*****Restore dataset before MI
 			quietly use `pre_mi', clear
+			
+			log off
 		}
 	}
 }
@@ -1524,9 +1644,7 @@ if `n_loglog_graphs' == 0 {
 }
 
 **Create dummy Schoenfeld figures in none were exported
-local schoenfeld_files : dir "$projectdir/output/figures" files "schoenfeld_*.$img"
-
-if `n_schoenfeld_graphs' == 0 {
+if $n_schoenfeld_graphs == 0 {
     preserve
     clear
     set obs 1
