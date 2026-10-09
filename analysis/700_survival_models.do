@@ -115,79 +115,23 @@ program define cox_model, rclass
         post $cox_ph ("`outcome'") ("`ph_exposure'") ("`model_label'") ("Global") (.) (.) (.) (`ph_rc')
     }
 	
-	**Adjusted exposure diagnostic: smoothed scaled Schoenfeld residuals
-	
-    **Latest time with at least 8 patients at risk in every exposure group
-    local ph_tmax 0
-    quietly levelsof `ph_exposure' if e(sample), local(ph_levels)
+    **Adjusted exposure diagnostic: smoothed scaled Schoenfeld residuals
 
-    foreach ph_time in 0 1 2 3 4 5 6 7 8 9 10 {
-        local ph_time_ok 1
+    **Hide individual residual points
+    capture noisily estat phtest, plot(1.`ph_exposure') msymbol(i) lineopts(lcolor(navy) lwidth(medthick)) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) title("") legend(off) name(ph_exposure_plot, replace)
 
-        foreach ph_level of local ph_levels {
-            quietly count if e(sample) & ///
-                `ph_exposure' == `ph_level' & _t >= `ph_time'
+    local ph_plot_rc = _rc
 
-            if r(N) < 8 local ph_time_ok 0
-        }
-        if `ph_time_ok' == 1 local ph_tmax `ph_time'
-    }
+    if `ph_plot_rc' == 0 {
+        capture noisily graph export "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", name(ph_exposure_plot) replace
 
-    di as text "Adjusted Schoenfeld plot truncated at `ph_tmax' years"
-
-    if `ph_tmax' > 0 {
-
-        **Generate residuals from the full fitted model
-        tempname ph_stub
-		
-		log on
-
-        capture noisily {
-			quietly predict double `ph_stub'*, scaledsch
-
-			**Identify the exposure coefficient rather than assuming column 1
-			tempname ph_b
-			matrix `ph_b' = e(b)
-
-			local ph_col = colnumb(`ph_b', "1.`ph_exposure'")
-			if missing(`ph_col') error 498
-
-			local ph_residual "`ph_stub'`ph_col'"
-
-			**Print the selected residual label to verify its identity
-			local ph_residual_label : variable label `ph_residual'
-			di as text "Selected residual: `ph_residual_label'"
-
-			quietly count if e(sample) & _d == 1 & ///
-				_t <= `ph_tmax' & !missing(`ph_residual')
-
-            if r(N) < 2 error 2001
-
-            **Match estat phtest's default smoothing method
-            twoway lowess `ph_residual' _t if e(sample) & _d == 1 & _t <= `ph_tmax', mean noweight bwidth(0.8) lcolor(navy) lwidth(medthick) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) xlabel(0(1)`ph_tmax', nogrid labsize(small)) xscale(range(0 `ph_tmax')) title("") legend(off) name(ph_exposure_plot, replace)
-        }
-
-        local ph_plot_rc = _rc
-        capture drop `ph_stub'*
-		
-        if `ph_plot_rc' == 0 {
-            capture noisily graph export ///
-                "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", ///
-                name(ph_exposure_plot) replace
-
-            if _rc == 0 {
-                global n_schoenfeld_graphs = $n_schoenfeld_graphs + 1
-            }
-        }
-        else {
-            di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
+        if _rc == 0 {
+            global n_schoenfeld_graphs = $n_schoenfeld_graphs + 1
         }
     }
     else {
-        di as text "No non-redacted follow-up beyond time zero; skipping Schoenfeld plot."
+        di as error "Schoenfeld plot failed; return code `ph_plot_rc'"
     }
-	
-	log off
 }
 
 	**Check to ensure model ran ok
@@ -1176,6 +1120,8 @@ foreach outcome of local outcomes {
     }
 	
 	di as txt "Outcome = `outcome'"
+	
+	local sens_outcome : list outcome in sens_outcomes
 			
 	***Store outcome variable name
 	local outlabel : variable label `outcome'
@@ -1223,8 +1169,8 @@ foreach outcome of local outcomes {
 		
 		di as txt "Exposure = `exposure'"
 		
-		****Check whether current outcome is a sensitivity outcome
-		local is_sens : list outcome in sens_outcomes
+		***Other exposures are analysed only for the primary outcome
+		if "`exposure'" != "`primary_exposure'" & "`outcome'" != "`primary_outcome'" continue
 		
 		***Failsafe if exposure has no observations
 		quietly count if !missing(`exposure')
@@ -1240,25 +1186,23 @@ foreach outcome of local outcomes {
 			continue
 		}
 
-		****Run univariable model (for primary exposure, excluding sensitivity outcomes)
-		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
+		***Run these models for primary exposure only for each outcome other than sensitivity outcomes 
+		if "`exposure'" == "`primary_exposure'" & !`sens_outcome' {
+			
+			****Run univariable model
 			local model_terms i.`exposure' if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted"'
-		}
 		
-		****Run age and sex-adjusted model (for primary exposure, excluding sensitivity outcomes)
-		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
+			****Run age and sex-adjusted model
 			local model_terms i.`exposure' age_land_decile i.sex if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age/sex-adjusted"' 
-		}
 		
-		****Run multivariable model (for primary exposure and outcome, excluding sensitivity outcomes)
-		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
+			****Run multivariable model
 			local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable core"' 
 		}
 		
-		****Run multivariable model with baseline urate and eGFR (values closest to before ULT initiation, but within 12m) 
+		****Run multivariable model with baseline urate and eGFR for all exposures and outcomes
 		local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra' if !missing(`exposure')
 		local run_ph = ("`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'") //also output PH test for this if it is the primary model
 		cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable extra"' "`run_ph'"
@@ -1378,7 +1322,7 @@ foreach outcome of local outcomes {
 			}
 		}
 		
-	    ****Run Fine-Gray competing-risk models (stcprep) for primary model
+	    ****Run Fine-Gray competing-risk models (stcprep) for primary model and exposure
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 				competing_risk_model_stc `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
@@ -1504,7 +1448,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-/*
+
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
@@ -1536,13 +1480,13 @@ foreach outcome of local outcomes {
 			di as text "MI START: `c(current_date)' `c(current_time)'"
 						
 			*****Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
-			capture noisily mi impute chained (ologit, iterate(20)) imd (mlogit, iterate(20) augment) ethnicity (mlogit, iterate(20) augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(2) burnin(2) rseed(12345)
-			local mi_rc = _rc
-			di as text "MI END: `c(current_date)' `c(current_time)'"
-			
+			capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity (mlogit, augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(10) burnin(10) rseed(12345)
+		    
 			*****Skip MI models if imputation fails
 			local mi_rc = _rc
 			
+			di as text "MI END: `c(current_date)' `c(current_time)'"
+						
 			if `mi_rc' {
 				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
 				quietly use `pre_mi', clear	
@@ -1564,7 +1508,6 @@ foreach outcome of local outcomes {
 			
 			log off
 		}
-		*/
 	}
 }
 	
