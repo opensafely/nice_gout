@@ -139,23 +139,37 @@ program define cox_model, rclass
 
         **Generate residuals from the full fitted model
         tempname ph_stub
+		
+		log on
 
         capture noisily {
-            quietly predict double `ph_stub'*, scaledsch
+			quietly predict double `ph_stub'*, scaledsch
 
-            **First residual corresponds to the binary exposure:
-            quietly count if e(sample) & _d == 1 & ///
-                _t <= `ph_tmax' & !missing(`ph_stub'1)
+			**Identify the exposure coefficient rather than assuming column 1
+			tempname ph_b
+			matrix `ph_b' = e(b)
+
+			local ph_col = colnumb(`ph_b', "1.`ph_exposure'")
+			if missing(`ph_col') error 498
+
+			local ph_residual "`ph_stub'`ph_col'"
+
+			**Print the selected residual label to verify its identity
+			local ph_residual_label : variable label `ph_residual'
+			di as text "Selected residual: `ph_residual_label'"
+
+			quietly count if e(sample) & _d == 1 & ///
+				_t <= `ph_tmax' & !missing(`ph_residual')
 
             if r(N) < 2 error 2001
 
             **Match estat phtest's default smoothing method
-            twoway lowess `ph_stub'1 _t if e(sample) & _d == 1 & _t <= `ph_tmax', mean noweight bwidth(0.8) lcolor(navy) lwidth(medthick) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) xlabel(0(1)`ph_tmax', nogrid labsize(small)) xscale(range(0 `ph_tmax')) title("") legend(off) name(ph_exposure_plot, replace)
+            twoway lowess `ph_residual' _t if e(sample) & _d == 1 & _t <= `ph_tmax', mean noweight bwidth(0.8) lcolor(navy) lwidth(medthick) xtitle("Years from landmark", size(medsmall)) ytitle("Smoothed scaled Schoenfeld residuals", size(medsmall)) xlabel(0(1)`ph_tmax', nogrid labsize(small)) xscale(range(0 `ph_tmax')) title("") legend(off) name(ph_exposure_plot, replace)
         }
 
         local ph_plot_rc = _rc
         capture drop `ph_stub'*
-
+		
         if `ph_plot_rc' == 0 {
             capture noisily graph export ///
                 "$projectdir/output/figures/schoenfeld_`ph_exposure'_`outcome'.$img", ///
@@ -172,6 +186,8 @@ program define cox_model, rclass
     else {
         di as text "No non-redacted follow-up beyond time zero; skipping Schoenfeld plot."
     }
+	
+	log off
 }
 
 	**Check to ensure model ran ok
@@ -1057,7 +1073,7 @@ local exposure_sens_300_360 urate_targets_12m_ult
 **Define exposure list to loop through
 local primary_exposure `exposure_complete_360'
 local secondary_exposures `exposure_nomiss_360' `exposure_sens_misscat' `exposure_sens_300_360'
-local exposures `secondary_exposures' `primary_exposure' 
+local exposures `primary_exposure' `secondary_exposures' 
 *local exposures `primary_exposure'
 
 **Primary outcome
@@ -1086,8 +1102,9 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 
 **Define outcome list to loop through
 local primary_outcome sec_ckd_egfr_land_date
-local secondary_outcomes first_ckd_egfr_land_date first_ckd_code_land_date death_land_date hernia_land_date
-local outcomes `secondary_outcomes' `primary_outcome' 
+local sens_outcomes first_ckd_egfr_land_date first_ckd_code_land_date 
+local secondary_outcomes death_land_date hernia_land_date
+local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
 *local outcomes `primary_outcome'
 
 **Outcome status at baseline/landmark variables
@@ -1206,6 +1223,9 @@ foreach outcome of local outcomes {
 		
 		di as txt "Exposure = `exposure'"
 		
+		****Check whether current outcome is a sensitivity outcome
+		local is_sens : list outcome in sens_outcomes
+		
 		***Failsafe if exposure has no observations
 		quietly count if !missing(`exposure')
 		if r(N) == 0 {
@@ -1220,20 +1240,20 @@ foreach outcome of local outcomes {
 			continue
 		}
 
-		****Run univariable model (for primary exposure and outcome only)
-		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+		****Run univariable model (for primary exposure, excluding sensitivity outcomes)
+		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
 			local model_terms i.`exposure' if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted"'
 		}
 		
-		****Run age and sex-adjusted model (for primary exposure only)
-		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+		****Run age and sex-adjusted model (for primary exposure, excluding sensitivity outcomes)
+		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
 			local model_terms i.`exposure' age_land_decile i.sex if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age/sex-adjusted"' 
 		}
 		
-		****Run multivariable model (for primary exposure and outcome only)
-		if "`exposure'" == "`primary_exposure'" & "`outcome'" == "`primary_outcome'" {
+		****Run multivariable model (for primary exposure and outcome, excluding sensitivity outcomes)
+		if "`exposure'" == "`primary_exposure'" & !`is_sens' {
 			local model_terms i.`exposure' `patient_predictors_core' if !missing(`exposure')
 			cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Multivariable core"' 
 		}

@@ -502,7 +502,7 @@ gen ckd_baseline = (ckd_free_ult == 0) if !missing(ckd_free_ult)
 gen ckd_free_at_landmark = ckd_free_landmark if !missing(ult_landmark)
 
 ****Meets all inclusion criteria
-gen eligible_landmark = has_12m_fup_ult == 1 & alive_landmark == 1 & deregistered_landmark == 0 & ckd_baseline == 0 & ckd_free_at_landmark == 1
+gen eligible_landmark = !missing(ult_landmark) & (ult_landmark < date("$studyfup_date", "YMD")) & has_12m_fup_ult == 1 & alive_landmark == 1 & deregistered_landmark == 0 & ckd_baseline == 0 & ckd_free_at_landmark == 1
 
 **Labels
 label define inclusion_yesno 0 "No" 1 "Yes", replace
