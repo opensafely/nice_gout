@@ -87,10 +87,9 @@ program define rounded_categorical
 		egen total = total(count)
 		gen percent = round((count/total)*100, 0.01)
 		order total, before(percent)
-		*egen mincount = min(count)
-		replace percent =. if count<=7
-		replace total =. if count<=7
-		replace count =. if count<=7
+        foreach var in percent total count {
+            replace `var' = . if _freq < 8
+        }
 		format percent %14.4f
 		format count total %14.0f
 		gen str80 exposure_group = "`group'"
@@ -109,26 +108,24 @@ program define rounded_continuous
 	local outcome `varlist'
 	preserve 
 		local outcome_desc : variable label `outcome'
-		collapse (count) count_un=`outcome' total_un=${disease} (mean) mean=`outcome' (sd) stdev=`outcome'
+		collapse (count) count_un=`outcome' total_un=${disease} (mean) mean=`outcome' (sd) stdev=`outcome' (median) median=`outcome'
 		gen count = round(count_un, 5)
 		gen total = round(total_un, 5)
-		replace stdev = . if count<=7
-		replace mean = . if count<=7
-		replace total = . if count<=7
-		replace count = . if count<=7
+		foreach var in stdev mean median total count {
+			replace `var' = . if count_un < 8
+		}
 		gen variable = `"`outcome_desc'"'
 		order variable, first
 		gen categories = "Not applicable"
 		order categories, after(variable)
 		order count, after(stdev)
 		order total, after(count)
-		format mean %14.2f
-		format stdev %14.2f
+		format mean stdev median %14.2f
 		format count %14.0f
 		gen str80 exposure_group = "`group'"
 		order exposure_group, first
-		list exposure_group variable categories mean stdev count total
-		keep exposure_group variable categories mean stdev count total
+		list exposure_group variable categories mean stdev median count total
+		keep exposure_group variable categories mean stdev median count total
 		capture append using `"`outfile'"'
 		save `"`outfile'"', replace
     restore
@@ -474,7 +471,7 @@ else {
     di as text "No summary table created; skipping export."
 }
 
-*Landmark table for flowchart of eligibility
+*Landmark table for flowchart of eligibility ========================*
 
 **Store table name
 local cohort "landmark_inclusion"
@@ -485,6 +482,11 @@ capture erase "`results'"
 
 **Load processed dataset
 use "$projectdir/output/data/cohort_processed.dta", clear
+
+**Censoring date, matching the survival analysis
+gen study_end = date("$studyfup_date", "YMD")
+egen censor_date = rowmin(study_end date_of_death reg_end_date)
+format study_end censor_date %td
 
 **Include everyone who started ULT
 keep if !missing(ult_first_date)
@@ -501,26 +503,78 @@ gen ckd_baseline = (ckd_free_ult == 0) if !missing(ckd_free_ult)
 **CKD free at landmark
 gen ckd_free_at_landmark = ckd_free_landmark if !missing(ult_landmark)
 
-****Meets all inclusion criteria
-gen eligible_landmark = !missing(ult_landmark) & (ult_landmark < date("$studyfup_date", "YMD")) & has_12m_fup_ult == 1 & alive_landmark == 1 & deregistered_landmark == 0 & ckd_baseline == 0 & ckd_free_at_landmark == 1
+**Alive, registered and with follow-up beyond landmark
+gen flow_followup = !missing(ult_landmark, censor_date) & (censor_date > ult_landmark)
+
+**Additionally CKD free at ULT initiation
+gen flow_baseline = flow_followup == 1 & ckd_free_ult == 1
+
+**Additionally CKD free at landmark
+gen flow_landmark = flow_baseline == 1 & ckd_free_landmark == 1
+
+**Additionally has observed primary exposure
+gen flow_exposure = flow_landmark == 1 & !missing(urate_12m_ult)
+
+**Additionally has all covariates for the fully adjusted model
+gen flow_complete = flow_exposure
+
+foreach var in age_land_decile sex imd ethnicity bmi_value smoke diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land urate_before_ult_value egfr_before_ult_value practice_id {
+    replace flow_complete = 0 if missing(`var')
+}
+
+**Exclude categories treated as missing in the survival code
+foreach var in imd ethnicity smoke {
+    replace flow_complete = 0 if `var' == 9
+}
 
 **Labels
 label define inclusion_yesno 0 "No" 1 "Yes", replace
 
-foreach var in alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark eligible_landmark {
+foreach var in alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark flow_followup flow_baseline flow_landmark flow_exposure flow_complete {
     label values `var' inclusion_yesno
 }
 
+**Labels
 label var alive_landmark "Alive at ULT plus 12 months"
 label var deregistered_landmark "Deregistered by ULT plus 12 months"
 label var ckd_baseline "CKD at ULT initiation"
 label var ckd_free_at_landmark "CKD free at ULT plus 12 months"
-label var eligible_landmark "Meets all landmark inclusion criteria"
+label var flow_followup "Follow-up beyond landmark, alive and registered"
+label var flow_baseline "Additionally CKD free at ULT initiation"
+label var flow_landmark "Additionally CKD free at landmark"
+label var flow_exposure "Additionally has observed primary exposure"
+label var flow_complete "Additionally has complete adjustment covariates"
 
 **Output each characteristic among all ULT initiators
-foreach var in has_12m_fup_ult alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark eligible_landmark {
+foreach var in has_12m_fup_ult alive_landmark deregistered_landmark ckd_baseline ckd_free_at_landmark flow_followup flow_baseline flow_landmark flow_exposure flow_complete {
     rounded_categorical `var', outfile("`results'") group("All ULT initiators")
 }
+
+**Output mean and median duration of follow-up
+
+**Available follow-up: ends at death, deregistration or study end
+gen available_followup_years = ((censor_date - ult_landmark) / 365.25) if flow_landmark == 1
+
+label var available_followup_years "Available follow-up after landmark, years"
+
+**Follow-up including censoring or the CKD event
+gen followup_end = censor_date
+
+replace followup_end = second_egfr_ckd_date if !missing(second_egfr_ckd_date, ult_landmark) & (second_egfr_ckd_date > ult_landmark) & (second_egfr_ckd_date <= censor_date)
+
+gen ckd_followup_years = ((followup_end - ult_landmark) / 365.25) if flow_landmark == 1
+
+label var ckd_followup_years "Follow-up to primary CKD event or censoring, years"
+
+**Output both summaries among eligible landmark patients
+preserve
+keep if flow_landmark == 1
+
+foreach var in available_followup_years ckd_followup_years {
+    rounded_continuous `var', outfile("`results'") group("Eligible landmark cohort")
+}
+
+restore
 
 **Export to CSV
 capture confirm file "`results'"
