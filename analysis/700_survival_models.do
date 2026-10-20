@@ -1791,6 +1791,9 @@ if _rc {
 
     export delimited using "$projectdir/output/tables/km_weekly_primary.csv", replace
 
+    restore
+}
+
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
 
