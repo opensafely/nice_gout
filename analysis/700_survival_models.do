@@ -1917,4 +1917,4 @@ if $n_schoenfeld_graphs == 0 {
     restore
 }
 
-log close
+capture log close
