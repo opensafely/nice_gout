@@ -974,6 +974,233 @@ program define competing_risk_model_stc, rclass
     return scalar model_ok = 1
 end
 
+*Programme to export survival tables
+
+capture program drop export_km_weekly
+program define export_km_weekly
+
+    syntax, EXPOSURE(varname numeric) OUTFILE(string) TMAX(real)
+
+    preserve
+
+    *****Restrict to survival analysis population
+    quietly keep if _st == 1 & !missing(`exposure')
+
+    *****One record per patient, starting at landmark
+    isid patient_id
+    assert _t0 == 0
+    assert inlist(`exposure', 0, 1)
+
+    *****Identify exposure groups
+    quietly levelsof `exposure', local(groups)
+
+    *****Initial number in each group
+    bysort `exposure': gen long n_total = _N
+	
+	*****Save initial exposure-group sizes
+	tempfile initial_sizes original_data
+
+	quietly save "`original_data'", replace
+
+	bysort `exposure': keep if _n == 1
+	keep `exposure' n_total
+	quietly save "`initial_sizes'", replace
+
+	*****Restore original observations
+	quietly use "`original_data'", clear
+
+    *****Assign exits to weekly intervals
+    gen long week = ceil(_t * 365.25 / 7)
+    replace week = 1 if week < 1
+
+    gen long events = (_d == 1)
+    gen long censored = (_d == 0)
+
+    *****Maximum number of weeks
+    local maxweek = floor(`tmax' * 365.25 / 7)
+
+    *****Keep exits within follow-up
+    keep if week <= `maxweek'
+
+    *****Aggregate weekly counts
+    collapse (max) n_total (sum) events censored, by(`exposure' week)
+
+    tempfile weekly
+    save "`weekly'", replace
+
+    *****Construct complete weekly grid
+    clear
+    local ngroups : word count `groups'
+    set obs `ngroups'
+
+    gen byte `exposure' = .
+    local i = 1
+    foreach g of local groups {
+        replace `exposure' = `g' in `i'
+        local ++i
+    }
+
+    expand `maxweek'
+    bysort `exposure': gen long week = _n
+
+    merge 1:1 `exposure' week using "`weekly'", nogen
+
+    replace events = 0 if missing(events)
+    replace censored = 0 if missing(censored)
+
+    *****Retrieve initial group sizes
+	drop n_total
+	merge m:1 `exposure' using "`initial_sizes'", nogen
+	rename n_total group_n
+
+	assert !missing(group_n)
+
+    *****Calculate exact risk sets internally
+    sort `exposure' week
+
+    by `exposure': gen double cumulative_exits = sum(events + censored)
+    gen double risk_start = group_n - cumulative_exits + events + censored
+    gen double risk_end = risk_start - events - censored
+
+    assert risk_start >= 0 if !missing(risk_start)
+    assert risk_end >= 0 if !missing(risk_end)
+    assert events + censored <= risk_start if !missing(risk_start)
+
+    *****Create disclosure-controlled interval table
+    tempfile release_table
+    tempname handle
+
+    postfile `handle' double exposure_group start_week end_week n_at_risk n_events n_censored using "`release_table'", replace
+
+    *****Build non-overlapping intervals
+    foreach g of local groups {
+
+        quietly count if `exposure' == `g'
+        local n_weeks = r(N)
+
+        local interval_start = 1
+        local interval_risk = .
+        local total_events = 0
+        local total_censored = 0
+        local exported = 0
+        local suppressed_weeks = 0
+
+        forvalues w = 1/`maxweek' {
+
+            quietly summarize risk_start if `exposure' == `g' & week == `w', meanonly
+            local current_risk = r(mean)
+
+            quietly summarize risk_end if `exposure' == `g' & week == `w', meanonly
+            local remaining_risk = r(mean)
+
+            quietly summarize events if `exposure' == `g' & week == `w', meanonly
+            local current_events = r(mean)
+
+            quietly summarize censored if `exposure' == `g' & week == `w', meanonly
+            local current_censored = r(mean)
+
+            *****Start new interval
+            if `w' == `interval_start' {
+                local interval_risk = `current_risk'
+            }
+
+            *****Accumulate counts
+            local total_events = `total_events' + `current_events'
+            local total_censored = `total_censored' + `current_censored'
+
+            *****Disclosure conditions
+            local event_ok = (`total_events' == 0 | `total_events' >= 8)
+            local censor_ok = (`total_censored' == 0 | `total_censored' >= 8)
+            local risk_ok = (`interval_risk' >= 8 & `remaining_risk' >= 8)
+
+            *****Close interval only if all conditions met
+            if `event_ok' & `censor_ok' & `risk_ok' {
+
+                local risk5 = round(`interval_risk', 5)
+                local events5 = round(`total_events', 5)
+                local censored5 = round(`total_censored', 5)
+
+                post `handle' (`g') (`interval_start' - 1) (`w') (`risk5') (`events5') (`censored5')
+
+                local ++exported
+
+                *****Reset for next interval
+                local interval_start = `w' + 1
+                local total_events = 0
+                local total_censored = 0
+            }
+
+            *****Stop when risk set becomes too small
+            if `remaining_risk' < 8 {
+                continue, break
+            }
+        }
+
+        local suppressed_weeks = `maxweek' - `interval_start' + 1
+        if `suppressed_weeks' < 0 local suppressed_weeks = 0
+
+        di as text "Group `g': `exported' intervals exported"
+        di as text "Group `g': `suppressed_weeks' terminal weeks omitted"
+    }
+
+    postclose `handle'
+
+    *****Load release table
+    use "`release_table'", clear
+
+    quietly count
+    if r(N) == 0 {
+        di as error "No intervals met disclosure requirements."
+        restore
+        exit
+    }
+
+    *****Convert interval boundaries to years
+    gen double start_years = start_week * 7 / 365.25
+    gen double end_years = end_week * 7 / 365.25
+
+    *****Verify count rounding and minimum cell sizes
+    foreach v in n_at_risk n_events n_censored {
+        assert mod(`v', 5) == 0
+        assert `v' == 0 | `v' >= 10
+    }
+
+    *****Verify intervals do not overlap
+    sort exposure_group start_week
+
+    by exposure_group: assert start_week == end_week[_n-1] if _n > 1
+
+    *****Export counts only
+    order exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored
+
+    *****Reconstruct survival from rounded counts
+	assert n_at_risk > 0
+	assert n_at_risk - n_censored/2 > 0
+	assert n_events <= n_at_risk - n_censored/2
+	
+    gen double interval_survival = 1 - n_events / (n_at_risk - n_censored/2)
+
+    assert inrange(interval_survival, 0, 1) if !missing(interval_survival)
+	
+	*****Export rounded counts only
+	export delimited exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored using "`outfile'", replace
+
+    by exposure_group: gen double survival = interval_survival if _n == 1
+    by exposure_group: replace survival = survival[_n-1] * interval_survival if _n > 1
+
+    *****Log-minus-log transformation
+    gen double loglog_survival = -ln(-ln(survival)) if survival > 0 & survival < 1
+
+    *****Kaplan-Meier approximation
+    twoway (line survival end_years if exposure_group == 0, sort connect(stairstep)) (line survival end_years if exposure_group == 1, sort connect(stairstep)), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("Survival probability") name(km_from_table, replace)
+
+    *****Log-minus-log approximation
+    twoway (line loglog_survival end_years if exposure_group == 0, sort) (line loglog_survival end_years if exposure_group == 1, sort), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("-ln[-ln(Survival)]") name(loglog_from_table, replace)
+
+    restore
+
+end
+
 *Load processed cohort ================================
 use "$projectdir/output/data/cohort_processed.dta", clear
 
@@ -1017,8 +1244,8 @@ local exposure_sens_300_360 urate_targets_12m_ult
 **Define exposure list to loop through
 local primary_exposure `exposure_complete_360'
 local secondary_exposures `exposure_nomiss_360' `exposure_sens_misscat' `exposure_sens_300_360'
-local exposures `primary_exposure' `secondary_exposures' 
-*local exposures `primary_exposure'
+*local exposures `primary_exposure' `secondary_exposures' 
+local exposures `primary_exposure'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
@@ -1048,8 +1275,8 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 local primary_outcome sec_ckd_egfr_land_date
 local sens_outcomes first_ckd_egfr_land_date first_ckd_code_land_date 
 local secondary_outcomes death_land_date hernia_land_date
-local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
-*local outcomes `primary_outcome'
+*local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
+local outcomes `primary_outcome'
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1321,12 +1548,13 @@ foreach outcome of local outcomes {
 				di as error "Time-split analysis failed; return code `ts_rc'"
 			}
 		}
-		
+		/*
 	    ****Run Fine-Gray competing-risk models (stcprep) for primary model and exposure
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			local model_terms i.`exposure' `patient_predictors_core' `patient_predictors_extra'
 				competing_risk_model_stc `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Fine-Gray extra"' `"death_compete"'
 		}
+		*/
 		
 		****Output KM and loglog plots
 		levelsof `exposure' if !missing(`exposure') & _st == 1, local(levels)
@@ -1381,6 +1609,20 @@ foreach outcome of local outcomes {
 		}
 
 		di as text "KM/log-log plots for `exposure' truncated at `km_tmax' years"
+		
+		*****Export weekly survival table for primary analysis only
+		log on 
+		
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" & `km_tmax' > 0 {
+
+			export_km_weekly, exposure(`exposure') tmax(`km_tmax') outfile("$projectdir/output/tables/km_weekly_primary.csv")
+
+			graph export "$projectdir/output/figures/km_from_table.$img", name(km_from_table) replace
+			graph export "$projectdir/output/figures/loglog_from_table.$img", name(loglog_from_table) replace
+
+		}
+		
+		log off
 		
 		*****Naming of graphs
 		local graphstub = substr("`exposure'_`outcome'", 1, 25)
@@ -1448,7 +1690,7 @@ foreach outcome of local outcomes {
 		else {
 			di as text "No non-redacted follow-up beyond time zero; skipping KM and log-log plots."
 		}
-
+/*
 		****Run multiply imputed models for primary model
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
 			
@@ -1475,22 +1717,16 @@ foreach outcome of local outcomes {
 
 			*****Register regular variables
 			mi register regular `exposure' `landmark_date' age_land_decile sex diabetes_land heart_failure_land chd_land cva_land hypertension_land alcohol_land diuretic_land sglt2_land ace_arb_land stop_date fail na_hazard practice_id
-			
-			log on
-			di as text "MI START: `c(current_date)' `c(current_time)'"
 						
 			*****Multiple imputation by chained equations // Limit categorical regression iterations; show ethnicity diagnostics
 			capture noisily mi impute chained (ologit) imd (mlogit, augment) ethnicity (mlogit, augment) smoke (pmm, knn(5)) bmi_value urate_before_ult_value egfr_before_ult_value = i.`exposure' age_land_decile i.sex i.diabetes_land i.heart_failure_land i.chd_land i.cva_land i.hypertension_land i.alcohol_land i.diuretic_land i.sglt2_land i.ace_arb_land fail na_hazard, add(10) burnin(10) rseed(12345)
 		    
 			*****Skip MI models if imputation fails
 			local mi_rc = _rc
-			
-			di as text "MI END: `c(current_date)' `c(current_time)'"
-						
+									
 			if `mi_rc' {
 				di as error "MI imputation failed: `outcome' / `exposure'; return code `mi_rc'"
 				quietly use `pre_mi', clear	
-				log off
 				continue
 			}
 
@@ -1505,9 +1741,8 @@ foreach outcome of local outcomes {
 						
 			*****Restore dataset before MI
 			quietly use `pre_mi', clear
-			
-			log off
 		}
+	*/	
 	}
 }
 	
@@ -1540,6 +1775,24 @@ if _rc {
 format hazardratio lower95 upper95 pvalue %12.4f
 
 export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace datafmt
+
+*Create empty weekly survival table if no output was generated
+capture confirm file "$projectdir/output/tables/km_weekly_primary.csv"
+
+if _rc {
+
+    preserve
+    clear
+    set obs 0
+
+    foreach var in exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored {
+        gen double `var' = .
+    }
+
+    export delimited using "$projectdir/output/tables/km_weekly_primary.csv", replace
+
+    restore
+}
 
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
@@ -1667,4 +1920,4 @@ if $n_schoenfeld_graphs == 0 {
     restore
 }
 
-log close
+capture log close
