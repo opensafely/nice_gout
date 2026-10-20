@@ -1776,6 +1776,21 @@ format hazardratio lower95 upper95 pvalue %12.4f
 
 export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace datafmt
 
+*Create empty weekly survival table if no output was generated
+capture confirm file "$projectdir/output/tables/km_weekly_primary.csv"
+
+if _rc {
+
+    preserve
+    clear
+    set obs 0
+
+    foreach var in exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored {
+        gen double `var' = .
+    }
+
+    export delimited using "$projectdir/output/tables/km_weekly_primary.csv", replace
+
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
 
