@@ -1185,18 +1185,6 @@ program define export_km_weekly
 	*****Export rounded counts only
 	export delimited exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored using "`outfile'", replace
 
-    by exposure_group: gen double survival = interval_survival if _n == 1
-    by exposure_group: replace survival = survival[_n-1] * interval_survival if _n > 1
-
-    *****Log-minus-log transformation
-    gen double loglog_survival = -ln(-ln(survival)) if survival > 0 & survival < 1
-
-    *****Kaplan-Meier approximation
-    twoway (line survival end_years if exposure_group == 0, sort connect(stairstep)) (line survival end_years if exposure_group == 1, sort connect(stairstep)), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("Survival probability") name(km_from_table, replace)
-
-    *****Log-minus-log approximation
-    twoway (line loglog_survival end_years if exposure_group == 0, sort) (line loglog_survival end_years if exposure_group == 1, sort), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("-ln[-ln(Survival)]") name(loglog_from_table, replace)
-
     restore
 
 end
@@ -1211,6 +1199,8 @@ global n_schoenfeld_graphs = 0
 capture erase "$projectdir/output/figures/km_no_outputs.$img"
 capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
 capture erase "$projectdir/output/figures/schoenfeld_no_outputs.$img"
+capture erase "$projectdir/output/figures/km_reconstructed.$img"
+capture erase "$projectdir/output/figures/loglog_reconstructed.$img"
 
 *Define key variables for landmark survival analysis ===============================================
 
@@ -1617,9 +1607,6 @@ foreach outcome of local outcomes {
 
 			export_km_weekly, exposure(`exposure') tmax(`km_tmax') outfile("$projectdir/output/tables/km_weekly_primary.csv")
 
-			graph export "$projectdir/output/figures/km_from_table.$img", name(km_from_table) replace
-			graph export "$projectdir/output/figures/loglog_from_table.$img", name(loglog_from_table) replace
-
 		}
 		
 		log off
@@ -1794,6 +1781,49 @@ if _rc {
     restore
 }
 
+*Generate reconstructed survival plots from rounded counts
+preserve
+
+import delimited "$projectdir/output/tables/km_weekly_primary.csv", clear
+
+quietly count
+
+if r(N) > 0 {
+
+    sort exposure_group end_week
+
+    *****Calculate interval survival from rounded counts
+    gen double interval_survival = 1 - n_events / (n_at_risk - n_censored/2)
+
+    *****Check valid survival estimates
+    assert inrange(interval_survival, 0, 1) if !missing(interval_survival)
+
+    *****Calculate cumulative survival
+    by exposure_group: gen double survival = exp(sum(ln(interval_survival)))
+
+    *****Log-minus-log transformation
+    gen double loglog_survival = -ln(-ln(survival)) if survival > 0 & survival < 1
+
+    *****Reconstructed survival plot
+    capture noisily twoway (line survival end_years if exposure_group == 0, sort connect(stairstep)) (line survival end_years if exposure_group == 1, sort connect(stairstep)), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("Survival probability") name(km_reconstructed, replace) saving("$projectdir/output/figures/km_reconstructed.gph", replace)
+
+    if _rc == 0 {
+        capture noisily graph export "$projectdir/output/figures/km_reconstructed.$img", name(km_reconstructed) replace
+    }
+
+    *****Reconstructed log-minus-log plot
+    capture noisily twoway (line loglog_survival end_years if exposure_group == 0, sort) (line loglog_survival end_years if exposure_group == 1, sort), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("-ln[-ln(Survival)]") name(loglog_reconstructed, replace) saving("$projectdir/output/figures/loglog_reconstructed.gph", replace)
+
+    if _rc == 0 {
+        capture noisily graph export "$projectdir/output/figures/loglog_reconstructed.$img", name(loglog_reconstructed) replace
+    }
+}
+else {
+    di as text "No weekly survival data available; reconstructed graphs skipped."
+}
+
+restore
+
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
 
@@ -1917,6 +1947,44 @@ if $n_schoenfeld_graphs == 0 {
     twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Schoenfeld diagnostic unavailable") legend(off)
 
     graph export "$projectdir/output/figures/schoenfeld_no_outputs.$img", replace
+    restore
+}
+
+*Create dummy reconstructed KM figure if unavailable
+capture confirm file "$projectdir/output/figures/km_reconstructed.$img"
+
+if _rc {
+    preserve
+    clear
+    set obs 1
+    gen x = 1
+    gen y = 1
+
+    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed KM unavailable") legend(off) saving("$projectdir/output/figures/km_reconstructed_no_outputs.gph", replace)
+
+    if _rc == 0 {
+        capture noisily graph export "$projectdir/output/figures/km_reconstructed.$img", replace
+    }
+
+    restore
+}
+
+*Create dummy reconstructed log-log figure if unavailable
+capture confirm file "$projectdir/output/figures/loglog_reconstructed.$img"
+
+if _rc {
+    preserve
+    clear
+    set obs 1
+    gen x = 1
+    gen y = 1
+
+    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed log-log unavailable") legend(off) saving("$projectdir/output/figures/loglog_reconstructed_no_outputs.gph", replace)
+
+    if _rc == 0 {
+        capture noisily graph export "$projectdir/output/figures/loglog_reconstructed.$img", replace
+    }
+
     restore
 }
 
