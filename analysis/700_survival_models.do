@@ -1199,8 +1199,6 @@ global n_schoenfeld_graphs = 0
 capture erase "$projectdir/output/figures/km_no_outputs.$img"
 capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
 capture erase "$projectdir/output/figures/schoenfeld_no_outputs.$img"
-capture erase "$projectdir/output/figures/km_reconstructed.$img"
-capture erase "$projectdir/output/figures/loglog_reconstructed.$img"
 
 *Define key variables for landmark survival analysis ===============================================
 
@@ -1283,6 +1281,9 @@ local patient_predictors_extra ///
 foreach var in imd ethnicity smoke {
     replace `var' = . if `var' == 9
 }
+
+capture erase "$projectdir/output/figures/km_`primary_exposure'_`primary_outcome'_recon.$img"
+capture erase "$projectdir/output/figures/loglog_`primary_exposure'_`primary_outcome'_recon.$img"
 	
 *Run landmark Cox models =======================================================
 
@@ -1804,18 +1805,25 @@ if r(N) > 0 {
     *****Log-minus-log transformation
     gen double loglog_survival = -ln(-ln(survival)) if survival > 0 & survival < 1
 
-    *****Reconstructed survival plot
-    capture noisily twoway (line survival end_years if exposure_group == 0, sort connect(stairstep)) (line survival end_years if exposure_group == 1, sort connect(stairstep)), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("Survival probability") name(km_reconstructed, replace) saving("$projectdir/output/figures/km_reconstructed.gph", replace)
+	*****Reconstructed survival plot
+	local kmfile "km_`primary_exposure'_`primary_outcome'_recon"
 
-    if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/km_reconstructed.$img", name(km_reconstructed) replace
-    }
+	capture noisily twoway (line survival end_years if exposure_group == 0, sort connect(stairstep) lcolor(orange) lpattern(solid)) (line survival end_years if exposure_group == 1, sort connect(stairstep) lcolor(emerald) lpattern(solid)), yscale(range(0 1)) ylabel(0(0.2)1, nogrid labsize(small)) ytitle("Survival probability", size(medsmall)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) legend(order(1 "Target not achieved" 2 "Target achieved") title("Urate target attained", size(small) margin(b=1))) xsize(16) ysize(9) name(km_reconstructed, replace) saving("$projectdir/output/figures/`kmfile'.gph", replace)
 
+	if _rc == 0 {
+		capture noisily graph export "$projectdir/output/figures/`kmfile'.$img", name(km_reconstructed) replace
+	}
+	
     *****Reconstructed log-minus-log plot
-    capture noisily twoway (line loglog_survival end_years if exposure_group == 0, sort) (line loglog_survival end_years if exposure_group == 1, sort), legend(order(1 "Target not achieved" 2 "Target achieved")) xtitle("Years from landmark") ytitle("-ln[-ln(Survival)]") name(loglog_reconstructed, replace) saving("$projectdir/output/figures/loglog_reconstructed.gph", replace)
+    local loglogfile "loglog_`primary_exposure'_`primary_outcome'_recon"
+
+    quietly summarize end_years, meanonly
+    local reconstructed_tmax = r(max)
+
+    capture noisily twoway (line loglog_survival end_years if exposure_group == 0, sort lcolor(orange) lpattern(solid)) (line loglog_survival end_years if exposure_group == 1, sort lcolor(emerald) lpattern(solid)), ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `reconstructed_tmax')) xlabel(0(1)`reconstructed_tmax', nogrid labsize(small)) title("") legend(order(1 "Target not achieved" 2 "Target achieved") title("Urate target attained", size(small) margin(b=1))) xsize(16) ysize(9) name(loglog_reconstructed, replace) saving("$projectdir/output/figures/`loglogfile'.gph", replace)
 
     if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/loglog_reconstructed.$img", name(loglog_reconstructed) replace
+        capture noisily graph export "$projectdir/output/figures/`loglogfile'.$img", name(loglog_reconstructed) replace
     }
 }
 else {
@@ -1951,7 +1959,10 @@ if $n_schoenfeld_graphs == 0 {
 }
 
 *Create dummy reconstructed KM figure if unavailable
-capture confirm file "$projectdir/output/figures/km_reconstructed.$img"
+local kmfile "km_`primary_exposure'_`primary_outcome'_recon"
+local loglogfile "loglog_`primary_exposure'_`primary_outcome'_recon"
+
+capture confirm file "$projectdir/output/figures/`kmfile'.$img"
 
 if _rc {
     preserve
@@ -1960,17 +1971,17 @@ if _rc {
     gen x = 1
     gen y = 1
 
-    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed KM unavailable") legend(off) saving("$projectdir/output/figures/km_reconstructed_no_outputs.gph", replace)
+    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed KM unavailable") legend(off) name(km_reconstructed, replace) saving("$projectdir/output/figures/`kmfile'_no_outputs.gph", replace)
 
     if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/km_reconstructed.$img", replace
+        capture noisily graph export "$projectdir/output/figures/`kmfile'.$img", name(km_reconstructed) replace
     }
 
     restore
 }
 
 *Create dummy reconstructed log-log figure if unavailable
-capture confirm file "$projectdir/output/figures/loglog_reconstructed.$img"
+capture confirm file "$projectdir/output/figures/`loglogfile'.$img"
 
 if _rc {
     preserve
@@ -1979,10 +1990,10 @@ if _rc {
     gen x = 1
     gen y = 1
 
-    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed log-log unavailable") legend(off) saving("$projectdir/output/figures/loglog_reconstructed_no_outputs.gph", replace)
+    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed log-log unavailable") legend(off) name(loglog_reconstructed, replace) saving("$projectdir/output/figures/`loglogfile'_no_outputs.gph", replace)
 
     if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/loglog_reconstructed.$img", replace
+        capture noisily graph export "$projectdir/output/figures/`loglogfile'.$img", name(loglog_reconstructed) replace
     }
 
     restore
