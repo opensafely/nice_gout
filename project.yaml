@@ -305,10 +305,19 @@ actions:
         table2: output/tables/landmark_cox_risk_table.csv
         table3: output/tables/landmark_cox_absrisk.csv
         table4: output/tables/landmark_cox_ph.csv
-        table5: output/tables/km_weekly_primary.csv
+        table5: output/tables/km_survival_tables_rounded.csv
         figure1: output/figures/km_*.svg
         figure2: output/figures/loglog_*.svg
         figure3: output/figures/schoenfeld_*.svg
+
+  survival_plots:
+    run: stata-mp:v1 analysis/800_survival_plots.do
+    needs: [survival_models]
+    outputs:
+      moderately_sensitive:
+        log1: logs/survival_plots.log   
+        figure1: output/figures/km_recon_*.svg
+        figure2: output/figures/loglog_recon_*.svg
 
   generate_notebook:
     run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
