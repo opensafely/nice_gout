@@ -310,6 +310,15 @@ actions:
         figure2: output/figures/loglog_*.svg
         figure3: output/figures/schoenfeld_*.svg
 
+    survival_plots:
+    run: stata-mp:v1 analysis/800_survival_plots.do
+    needs: [survival_models]
+    outputs:
+      moderately_sensitive:
+        log1: logs/survival_plots.log   
+        figure1: output/figures/km_*.svg
+        figure2: output/figures/loglog_*.svg
+
   generate_notebook:
     run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
     needs: [temporal_plots, incidence_graphs, sarima]

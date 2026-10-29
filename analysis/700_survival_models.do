@@ -974,13 +974,17 @@ program define competing_risk_model_stc, rclass
     return scalar model_ok = 1
 end
 
-*Programme to export survival tables
+*Programme to export survival tables ========================================================
 
 capture program drop export_km_weekly
 program define export_km_weekly
 
-    syntax, EXPOSURE(varname numeric) OUTFILE(string) TMAX(real)
-
+	syntax, EXPOSURE(varname numeric) OUTCOME(string) OUTLABEL(string) MODEL(string) OUTFILE(string) TMAX(real)
+	
+	*****Store exposure label
+    local exposure_label : variable label `exposure'
+    if `"`exposure_label'"' == "" local exposure_label "`exposure'"
+	
     preserve
 
     *****Restrict to survival analysis population
@@ -989,10 +993,15 @@ program define export_km_weekly
     *****One record per patient, starting at landmark
     isid patient_id
     assert _t0 == 0
-    assert inlist(`exposure', 0, 1)
 
     *****Identify exposure groups
     quietly levelsof `exposure', local(groups)
+	
+	*****Store exposure-category labels
+    foreach g of local groups {
+        local category_`g' : label (`exposure') `g'
+        if `"`category_`g''"' == "" local category_`g' "`g'"
+    }
 
     *****Initial number in each group
     bysort `exposure': gen long n_total = _N
@@ -1170,8 +1179,17 @@ program define export_km_weekly
 
     by exposure_group: assert start_week == end_week[_n-1] if _n > 1
 
-    *****Export counts only
-    order exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored
+    *****Add analysis identifiers
+    gen str150 outcome = `"`outcome'"'
+    gen str150 outcome_label = `"`outlabel'"'
+	gen str150 exposure_name = "`exposure'"
+    gen str150 exposure = `"`exposure_label'"'
+    gen str150 exposure_category = ""
+    gen str80 model = `"`model'"'
+
+    foreach g of local groups {
+        replace exposure_category = `"`category_`g''"' if exposure_group == `g'
+    }
 
     *****Reconstruct survival from rounded counts
 	assert n_at_risk > 0
@@ -1182,8 +1200,25 @@ program define export_km_weekly
 
     assert inrange(interval_survival, 0, 1) if !missing(interval_survival)
 	
-	*****Export rounded counts only
-	export delimited exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored using "`outfile'", replace
+    *****Keep analysis identifiers and rounded counts
+    keep outcome outcome_label exposure_name exposure exposure_group exposure_category model start_week end_week start_years end_years n_at_risk n_events n_censored
+    order outcome outcome_label exposure_name exposure exposure_group exposure_category model start_week end_week start_years end_years n_at_risk n_events n_censored
+
+    *****Save current outcome's rows
+    tempfile current_rows
+    save "`current_rows'", replace
+
+    *****Append current rows to any outcomes already exported
+    capture confirm file "`outfile'"
+
+    if _rc == 0 {
+        import delimited using "`outfile'", clear varnames(1) stringcols(1 2 3 4 6 7)
+        append using "`current_rows'"
+    }
+
+    *****Export combined table
+    sort outcome exposure_name exposure_group start_week
+    export delimited using "`outfile'", replace
 
     restore
 
@@ -1199,6 +1234,7 @@ global n_schoenfeld_graphs = 0
 capture erase "$projectdir/output/figures/km_no_outputs.$img"
 capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
 capture erase "$projectdir/output/figures/schoenfeld_no_outputs.$img"
+capture erase "$projectdir/output/tables/km_survival_tables_rounded.csv"
 
 *Define key variables for landmark survival analysis ===============================================
 
@@ -1264,7 +1300,7 @@ local primary_outcome sec_ckd_egfr_land_date
 local sens_outcomes first_ckd_egfr_land_date first_ckd_code_land_date 
 local secondary_outcomes death_land_date hernia_land_date
 *local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
-local outcomes `primary_outcome'
+local outcomes `primary_outcome' `secondary_outcomes'
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1281,9 +1317,6 @@ local patient_predictors_extra ///
 foreach var in imd ethnicity smoke {
     replace `var' = . if `var' == 9
 }
-
-capture erase "$projectdir/output/figures/km_`primary_exposure'_`primary_outcome'_recon.$img"
-capture erase "$projectdir/output/figures/loglog_`primary_exposure'_`primary_outcome'_recon.$img"
 	
 *Run landmark Cox models =======================================================
 
@@ -1601,17 +1634,13 @@ foreach outcome of local outcomes {
 
 		di as text "KM/log-log plots for `exposure' truncated at `km_tmax' years"
 		
-		*****Export weekly survival table for primary analysis only
-		log on 
-		
-		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" & `km_tmax' > 0 {
+		*****Export weekly survival table for analyses of interest		
+        if "`exposure'" == "`primary_exposure'" & !`sens_outcome' & `km_tmax' > 0 {
 
-			export_km_weekly, exposure(`exposure') tmax(`km_tmax') outfile("$projectdir/output/tables/km_weekly_primary.csv")
+            export_km_weekly, exposure(`exposure') outcome("`outcome'") outlabel(`"`outlabel'"') model("Unadjusted") tmax(`km_tmax') outfile("$projectdir/output/tables/km_survival_tables_rounded.csv")
 
-		}
-		
-		log off
-		
+        }
+				
 		*****Naming of graphs
 		local graphstub = substr("`exposure'_`outcome'", 1, 25)
 		local kmname "km_`graphstub'"
@@ -1765,7 +1794,7 @@ format hazardratio lower95 upper95 pvalue %12.4f
 export delimited using "$projectdir/output/tables/landmark_cox_summary.csv", replace datafmt
 
 *Create empty weekly survival table if no output was generated
-capture confirm file "$projectdir/output/tables/km_weekly_primary.csv"
+capture confirm file "$projectdir/output/tables/km_survival_tables_rounded.csv"
 
 if _rc {
 
@@ -1773,64 +1802,22 @@ if _rc {
     clear
     set obs 0
 
+    foreach var in outcome outcome_label exposure_name exposure exposure_category {
+        gen str150 `var' = ""
+    }
+
+    gen str80 model = ""
+
     foreach var in exposure_group start_week end_week start_years end_years n_at_risk n_events n_censored {
         gen double `var' = .
     }
 
-    export delimited using "$projectdir/output/tables/km_weekly_primary.csv", replace
+    order outcome outcome_label exposure_name exposure exposure_group exposure_category model start_week end_week start_years end_years n_at_risk n_events n_censored
+
+    export delimited using "$projectdir/output/tables/km_survival_tables_rounded.csv", replace
 
     restore
 }
-
-*Generate reconstructed survival plots from rounded counts
-preserve
-
-import delimited "$projectdir/output/tables/km_weekly_primary.csv", clear
-
-quietly count
-
-if r(N) > 0 {
-
-    sort exposure_group end_week
-
-    *****Calculate interval survival from rounded counts
-    gen double interval_survival = 1 - n_events / (n_at_risk - n_censored/2)
-
-    *****Check valid survival estimates
-    assert inrange(interval_survival, 0, 1) if !missing(interval_survival)
-
-    *****Calculate cumulative survival
-    by exposure_group: gen double survival = exp(sum(ln(interval_survival)))
-
-    *****Log-minus-log transformation
-    gen double loglog_survival = -ln(-ln(survival)) if survival > 0 & survival < 1
-
-	*****Reconstructed survival plot
-	local kmfile "km_`primary_exposure'_`primary_outcome'_recon"
-
-	capture noisily twoway (line survival end_years if exposure_group == 0, sort connect(stairstep) lcolor(orange) lpattern(solid)) (line survival end_years if exposure_group == 1, sort connect(stairstep) lcolor(emerald) lpattern(solid)), yscale(range(0 1)) ylabel(0(0.2)1, nogrid labsize(small)) ytitle("Survival probability", size(medsmall)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xlabel(, nogrid labsize(small)) legend(order(1 "Target not achieved" 2 "Target achieved") title("Urate target attained", size(small) margin(b=1))) xsize(16) ysize(9) name(km_reconstructed, replace) saving("$projectdir/output/figures/`kmfile'.gph", replace)
-
-	if _rc == 0 {
-		capture noisily graph export "$projectdir/output/figures/`kmfile'.$img", name(km_reconstructed) replace
-	}
-	
-    *****Reconstructed log-minus-log plot
-    local loglogfile "loglog_`primary_exposure'_`primary_outcome'_recon"
-
-    quietly summarize end_years, meanonly
-    local reconstructed_tmax = r(max)
-
-    capture noisily twoway (line loglog_survival end_years if exposure_group == 0, sort lcolor(orange) lpattern(solid)) (line loglog_survival end_years if exposure_group == 1, sort lcolor(emerald) lpattern(solid)), ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `reconstructed_tmax')) xlabel(0(1)`reconstructed_tmax', nogrid labsize(small)) title("") legend(order(1 "Target not achieved" 2 "Target achieved") title("Urate target attained", size(small) margin(b=1))) xsize(16) ysize(9) name(loglog_reconstructed, replace) saving("$projectdir/output/figures/`loglogfile'.gph", replace)
-
-    if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/`loglogfile'.$img", name(loglog_reconstructed) replace
-    }
-}
-else {
-    di as text "No weekly survival data available; reconstructed graphs skipped."
-}
-
-restore
 
 *Output 5-year absolute risks
 capture use "$projectdir/output/data/landmark_cox_absrisk.dta", clear
@@ -1955,47 +1942,6 @@ if $n_schoenfeld_graphs == 0 {
     twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Schoenfeld diagnostic unavailable") legend(off)
 
     graph export "$projectdir/output/figures/schoenfeld_no_outputs.$img", replace
-    restore
-}
-
-*Create dummy reconstructed KM figure if unavailable
-local kmfile "km_`primary_exposure'_`primary_outcome'_recon"
-local loglogfile "loglog_`primary_exposure'_`primary_outcome'_recon"
-
-capture confirm file "$projectdir/output/figures/`kmfile'.$img"
-
-if _rc {
-    preserve
-    clear
-    set obs 1
-    gen x = 1
-    gen y = 1
-
-    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed KM unavailable") legend(off) name(km_reconstructed, replace) saving("$projectdir/output/figures/`kmfile'_no_outputs.gph", replace)
-
-    if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/`kmfile'.$img", name(km_reconstructed) replace
-    }
-
-    restore
-}
-
-*Create dummy reconstructed log-log figure if unavailable
-capture confirm file "$projectdir/output/figures/`loglogfile'.$img"
-
-if _rc {
-    preserve
-    clear
-    set obs 1
-    gen x = 1
-    gen y = 1
-
-    capture noisily twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("Reconstructed log-log unavailable") legend(off) name(loglog_reconstructed, replace) saving("$projectdir/output/figures/`loglogfile'_no_outputs.gph", replace)
-
-    if _rc == 0 {
-        capture noisily graph export "$projectdir/output/figures/`loglogfile'.$img", name(loglog_reconstructed) replace
-    }
-
     restore
 }
 
