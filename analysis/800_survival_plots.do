@@ -39,8 +39,8 @@ set scheme plotplainblind
 local n_km_graphs = 0
 local n_loglog_graphs = 0
 
-capture erase "$projectdir/output/figures/km_no_outputs.$img"
-capture erase "$projectdir/output/figures/loglog_no_outputs.$img"
+capture erase "$projectdir/output/figures/km_recon_no_outputs.$img"
+capture erase "$projectdir/output/figures/loglog_recon_no_outputs.$img"
 
 *Generate reconstructed survival plots from rounded counts ==========================
 import delimited "$projectdir/output/tables/km_survival_tables_rounded.csv", clear varnames(1) stringcols(1 2 3 4 6 7)
@@ -134,7 +134,7 @@ if r(N) > 0 {
             capture noisily twoway `km_curves', yscale(range(0 1)) ylabel(0(0.2)1, format(%3.1f) nogrid labsize(small)) ytitle("Survival probability", size(medsmall)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `km_tmax')) xlabel(0(1)`km_tmax', nogrid labsize(small)) title("") legend(order(`legorder') title(`"`legtitle'"', size(small) margin(b=1))) xsize(16) ysize(9) name(km_reconstructed, replace)
 
             if _rc == 0 {
-                capture noisily graph export "$projectdir/output/figures/km_`exposure'_`outcome'_recon.$img", name(km_reconstructed) replace
+                capture noisily graph export "$projectdir/output/figures/km_recon_`exposure'_`outcome'.$img", name(km_reconstructed) replace
                 if _rc == 0 local ++n_km_graphs
             }
 
@@ -146,7 +146,7 @@ if r(N) > 0 {
                 capture noisily twoway `loglog_curves', ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `km_tmax')) xlabel(0(1)`km_tmax', nogrid labsize(small)) title("") legend(order(`legorder') title(`"`legtitle'"', size(small) margin(b=1))) xsize(16) ysize(9) name(loglog_reconstructed, replace)
 
                 if _rc == 0 {
-                    capture noisily graph export "$projectdir/output/figures/loglog_`exposure'_`outcome'_recon.$img", name(loglog_reconstructed) replace
+                    capture noisily graph export "$projectdir/output/figures/loglog_recon_`exposure'_`outcome'.$img", name(loglog_reconstructed) replace
                     if _rc == 0 local ++n_loglog_graphs
                 }
             }
@@ -170,7 +170,7 @@ if `n_km_graphs' == 0 {
 
     twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("No Kaplan-Meier estimates available") legend(off)
 
-    graph export "$projectdir/output/figures/km_no_outputs.$img", replace
+    graph export "$projectdir/output/figures/km_recon_no_outputs.$img", replace
     restore
 }
 
@@ -184,7 +184,7 @@ if `n_loglog_graphs' == 0 {
 
     twoway scatter y x, msymbol(none) xlabel(none) ylabel(none) xtitle("") ytitle("") title("No log-log estimates available") legend(off)
 
-    graph export "$projectdir/output/figures/loglog_no_outputs.$img", replace
+    graph export "$projectdir/output/figures/loglog_recon_no_outputs.$img", replace
     restore
 }
 

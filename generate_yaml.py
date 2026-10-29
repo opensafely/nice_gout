@@ -295,8 +295,8 @@ yaml_footer = f"""
     outputs:
       moderately_sensitive:
         log1: logs/survival_plots.log   
-        figure1: output/figures/km_*.svg
-        figure2: output/figures/loglog_*.svg
+        figure1: output/figures/km_recon_*.svg
+        figure2: output/figures/loglog_recon_*.svg
 
   generate_notebook:
     run: jupyter:v1 jupyter nbconvert /workspace/analysis/report.ipynb --execute --to html --template basic --output-dir=/workspace/output --ExecutePreprocessor.timeout=86400 --no-input
