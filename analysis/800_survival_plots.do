@@ -71,8 +71,13 @@ if r(N) > 0 {
             isid exposure_group end_week
             assert !missing(exposure_group)
 
-            *****Use exposure label from the exported table
+            *****Set legend title
             local legtitle = exposure[1]
+            if `"`legtitle'"' == "" local legtitle "`exposure'"
+
+            if inlist("`exposure'", "urate_12m_ult", "urate_12m_ult_cat", "urate_12m_ult_recode", "urate_300_12m_ult", "urate_targets_12m_ult") {
+                local legtitle "Urate target attained"
+            }
 
             *****Determine whole-year upper axis limit
             quietly summarize end_years, meanonly
@@ -103,7 +108,7 @@ if r(N) > 0 {
             *****Build curves and legend from available categories
             quietly levelsof exposure_group, local(groups)
 
-            local colours "dkgreen orange navy cranberry teal purple"
+            local colours "emerald orange red blue dkgreen cranberry navy maroon teal sienna purple"
             local legorder
             local km_curves
             local loglog_curves

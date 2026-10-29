@@ -1268,8 +1268,8 @@ local exposure_sens_300_360 urate_targets_12m_ult
 **Define exposure list to loop through
 local primary_exposure `exposure_complete_360'
 local secondary_exposures `exposure_nomiss_360' `exposure_sens_misscat' `exposure_sens_300_360'
-*local exposures `primary_exposure' `secondary_exposures' 
-local exposures `primary_exposure'
+local exposures `primary_exposure' `secondary_exposures' 
+*local exposures `primary_exposure'
 
 **Primary outcome
 gen sec_ckd_egfr_land_date = second_egfr_ckd_date if (second_egfr_ckd_date > `landmark_date') & second_egfr_ckd_date !=. & `landmark_date' !=.
@@ -1299,8 +1299,8 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 local primary_outcome sec_ckd_egfr_land_date
 local sens_outcomes first_ckd_egfr_land_date first_ckd_code_land_date 
 local secondary_outcomes death_land_date hernia_land_date
-*local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
-local outcomes `primary_outcome' `secondary_outcomes'
+local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
+*local outcomes `primary_outcome' `secondary_outcomes'
 
 **Outcome status at baseline/landmark variables
 local outcome_free_baseline ckd_free_ult //CKD, defined using single eGFR <60 or CKD code at or before ULT initiation date
@@ -1635,7 +1635,7 @@ foreach outcome of local outcomes {
 		di as text "KM/log-log plots for `exposure' truncated at `km_tmax' years"
 		
 		*****Export weekly survival table for analyses of interest		
-        if "`exposure'" == "`primary_exposure'" & !`sens_outcome' & `km_tmax' > 0 {
+        if !`sens_outcome' & `km_tmax' > 0 {
 
             export_km_weekly, exposure(`exposure') outcome("`outcome'") outlabel(`"`outlabel'"') model("Unadjusted") tmax(`km_tmax') outfile("$projectdir/output/tables/km_survival_tables_rounded.csv")
 
@@ -1677,12 +1677,6 @@ foreach outcome of local outcomes {
 			quietly summarize _t if !missing(`exposure') & _st == 1 & _d == 1 & _t > 0, meanonly
 
 			if r(N) > 0 {
-				
-				/*
-				local log_xmin = floor(ln(r(min)))
-				quietly summarize _t if !missing(`exposure') & _st == 1 & _t > 0, meanonly
-				local log_xmax = ceil(ln(r(max)))
-				*/
 				
 				capture noisily stphplot if !missing(`exposure') & _st == 1, by(`exposure') nolntime `loglog_plotopts' ytitle("-log{-log(Survival probability)}", size(medsmall)) ylabel(, nogrid labsize(small)) xtitle("Years from landmark", size(medsmall) margin(medsmall)) xscale(range(0 `km_tmax')) xlabel(0(1)`km_tmax', nogrid labsize(small)) title("") legend(order(`legorder') title("`legtitle'", size(small) margin(b=1))) xsize(16) ysize(9) name(`loglogname', replace) saving("$projectdir/output/figures/loglog_`exposure'_`outcome'.gph", replace)
 
