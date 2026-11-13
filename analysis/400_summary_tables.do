@@ -488,8 +488,8 @@ gen study_end = date("$studyfup_date", "YMD")
 egen censor_date = rowmin(study_end date_of_death reg_end_date)
 format study_end censor_date %td
 
-**Include everyone who started ULT
-keep if !missing(ult_first_date)
+**Include everyone who started ULT before study end date
+keep if !missing(ult_first_date) & ult_first_date <= date("$studyend_date", "YMD")
 
 **Alive at ULT plus 12 months
 gen alive_landmark = (missing(date_of_death) | date_of_death > ult_landmark) if !missing(ult_landmark)

@@ -111,7 +111,19 @@ actions:
       --comorbidities_list {comorbidities_list}
     outputs:
       highly_sensitive:
-        cohort: output/dataset_incidence_ref.csv                     
+        cohort: output/dataset_incidence_ref.csv      
+
+  generate_dataset_consults:
+    run: ehrql:v1 generate-dataset analysis/dataset_definition_consults.py
+      --output output/dataset_consults.csv
+      --
+      --studystart_date "{studystart_date}"
+      --studyend_date "{studyend_date}"
+      --studyfup_date "{studyfup_date}"
+      --intervalstart_date "{studyend_date}"
+    outputs:
+      highly_sensitive:
+        cohort: output/dataset_consults.csv                       
 """
 
 yaml_template = ""
@@ -232,6 +244,14 @@ yaml_footer = f"""
         log1: logs/cohort_cleaning_ref.log   
         data1: output/data/cohort_processed_ref.dta
 
+  consults_cleaning:
+    run: stata-mp:v1 analysis/202_consults_cleaning.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{studyend_date}"
+    needs: [generate_dataset_consults]
+    outputs:
+      highly_sensitive:
+        log1: logs/consults_cleaning.log
+        data1: output/data/cohort_consults_processed.dta
+
   data_tables:
     run: stata-mp:v1 analysis/300_data_tables.do "{primary_disease}" "{demographic_list_stata}" "{outpatients_list_stata}"
     needs: [cohort_cleaning]
@@ -254,7 +274,15 @@ yaml_footer = f"""
     outputs:
       moderately_sensitive:
         log1: logs/summary_tables_ref.log   
-        table1: output/tables/summary_table_ref_*.csv        
+        table1: output/tables/summary_table_ref_*.csv
+
+  consults_tables:
+    run: stata-mp:v1 analysis/402_consults_tables.do "{primary_disease}" "{studyend_date}"
+    needs: [consults_cleaning]
+    outputs:
+      moderately_sensitive:
+        log1: logs/consults_tables.log
+        table1: output/tables/consults_table.csv
 
   temporal_plots:
     run: stata-mp:v1 analysis/500_temporal_plots.do "{primary_disease}" "{demographic_list_stata}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{intervention_date_2}"
