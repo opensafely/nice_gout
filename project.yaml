@@ -55,7 +55,7 @@ actions:
       --studystart_date "2016-07-01"
       --studyend_date "2025-06-30"
       --studyfup_date "2026-06-30"
-      --intervalstart_date "2025-06-30"
+      --intervalstart_date "2024-07-01"
     outputs:
       highly_sensitive:
         cohort: output/dataset_consults.csv                       
@@ -266,7 +266,7 @@ actions:
         data1: output/data/cohort_processed_ref.dta
 
   consults_cleaning:
-    run: stata-mp:v1 analysis/202_consults_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2025-06-30"
+    run: stata-mp:v1 analysis/202_consults_cleaning.do "gout" "2016-07-01" "2025-06-30" "2026-06-30" "2024-07-01"
     needs: [generate_dataset_consults]
     outputs:
       highly_sensitive:
@@ -298,7 +298,7 @@ actions:
         table1: output/tables/summary_table_ref_*.csv
 
   consults_tables:
-    run: stata-mp:v1 analysis/402_consults_tables.do "gout" "2025-06-30"
+    run: stata-mp:v1 analysis/402_consults_tables.do "gout" "2024-07-01"
     needs: [consults_cleaning]
     outputs:
       moderately_sensitive:
