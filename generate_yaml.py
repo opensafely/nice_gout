@@ -120,7 +120,7 @@ actions:
       --studystart_date "{studystart_date}"
       --studyend_date "{studyend_date}"
       --studyfup_date "{studyfup_date}"
-      --intervalstart_date "{studyend_date}"
+      --intervalstart_date "2024-07-01"
     outputs:
       highly_sensitive:
         cohort: output/dataset_consults.csv                       
@@ -245,7 +245,7 @@ yaml_footer = f"""
         data1: output/data/cohort_processed_ref.dta
 
   consults_cleaning:
-    run: stata-mp:v1 analysis/202_consults_cleaning.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "{studyend_date}"
+    run: stata-mp:v1 analysis/202_consults_cleaning.do "{primary_disease}" "{studystart_date}" "{studyend_date}" "{studyfup_date}" "2024-07-01"
     needs: [generate_dataset_consults]
     outputs:
       highly_sensitive:
@@ -277,7 +277,7 @@ yaml_footer = f"""
         table1: output/tables/summary_table_ref_*.csv
 
   consults_tables:
-    run: stata-mp:v1 analysis/402_consults_tables.do "{primary_disease}" "{studyend_date}"
+    run: stata-mp:v1 analysis/402_consults_tables.do "{primary_disease}" "2024-07-01"
     needs: [consults_cleaning]
     outputs:
       moderately_sensitive:

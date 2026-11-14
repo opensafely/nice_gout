@@ -55,7 +55,7 @@ if $running_locally ==1 {
     global studystart_date "2016-07-01"
     global studyend_date "2024-06-30"
     global studyfup_date "2026-06-30"
-    global intervalstart_date "$studyend_date"
+    global intervalstart_date "2024-07-01"
 }
 
 *Blood test and medication defined in the consultation dataset

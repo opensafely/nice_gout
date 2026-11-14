@@ -45,7 +45,7 @@ if $running_locally ==0 {
 
 if $running_locally ==1 {
     global disease "gout"
-    global intervalstart_date "$studyend_date"
+    global intervalstart_date "2024-07-01"
 }
 
 *Blood test and medication defined in the consultation dataset
