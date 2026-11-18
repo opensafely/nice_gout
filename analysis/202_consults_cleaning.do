@@ -165,12 +165,14 @@ lab var ${blood}_bl_cat "Baseline serum ${blood} level"
 lab def ${blood}_bl_cat 0 ">=360 micromol/L" 1 "<360 micromol/L" 9 "Not known", modify
 lab val ${blood}_bl_cat ${blood}_bl_cat
 
-**Agreed denominator: exclude baseline current medication AND documented target
+**Descriptive variable: baseline ULT prescription and serum urate below target
 gen controlled_bl = ${medication}_bl == 1 & ${blood}_bl_cat == 1
 lab var controlled_bl "Already receiving `Medication' and documented below target at baseline"
-gen eligible = controlled_bl == 0
+
+**Primary eligibility: exclude baseline serum urate below target, irrespective of ULT (include patients with serum urate >=360 or no valid baseline result)
+gen eligible = inlist(${blood}_bl_cat, 0, 9)
 lab var eligible "Eligible for primary target-attainment analysis"
-lab def eligible 0 "Already controlled on `Medication'" 1 "Eligible", modify
+lab def eligible 0 "Baseline serum urate below target" 1 "Eligible", modify
 lab val eligible eligible
 
 *Relevant blood tests ===================================================*
@@ -271,8 +273,8 @@ foreach blood in $blood {
 
 *Final primary outcome and save =========================================*
 
-**Leave baseline-controlled patients in the file for denominator checking
-**Their primary outcome is missing, so they are not counted as eligible failures.
+**Exclude patients below target at baseline from the primary outcome denominator
+**Their primary outcome is missing rather than counted as a failure
 replace ${blood}_target_12m = . if eligible == 0
 
 save "$projectdir/output/data/cohort_consults_processed.dta", replace

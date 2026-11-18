@@ -52,7 +52,7 @@ if $running_locally ==1 {
 global blood "urate"
 global medication "ult"
 local Medication = upper("$medication")
-local Blood = upper("$blood")
+local Blood = proper("$blood")
 
 *Inclusive end of the 12-calendar-month consultation interval
 local interval_start = date("$intervalstart_date", "YMD")
