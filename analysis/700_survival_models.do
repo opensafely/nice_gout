@@ -1320,15 +1320,13 @@ foreach var in imd ethnicity smoke {
 
 ***Generate age group at landmark for stratified analyses
 gen agegroup_land = .
-replace agegroup_land = 1 if age_land >= 18 & age_land < 40
-replace agegroup_land = 2 if age_land >= 40 & age_land < 60
-replace agegroup_land = 3 if age_land >= 60 & age_land < 80
-replace agegroup_land = 4 if age_land >= 80 & !missing(age_land)
+replace agegroup_land = 1 if age_land >= 18 & age_land < 50
+replace agegroup_land = 2 if age_land >= 50 & age_land < 70
+replace agegroup_land = 3 if age_land >= 70 & !missing(age_land)
 
-lab define agegroup_land 1 "18 to 39" ///
-                         2 "40 to 59" ///
-                         3 "60 to 79" ///
-                         4 "80 or above", modify
+lab define agegroup_land 1 "18 to 49" ///
+                         2 "50 to 69" ///
+                         3 "70 or above", modify
 
 lab values agegroup_land agegroup_land
 lab var agegroup_land "Age group at landmark"
@@ -1588,24 +1586,32 @@ foreach outcome of local outcomes {
 			}
 		}
 		
-		***Run unadjusted models stratified by age group and sex
+		***Run models stratified by age group and sex
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" & `primary_model_ok' == 1 {
 
+			****Age-stratified models, adjusted for age and sex
 			quietly levelsof agegroup_land if _st == 1 & !missing(`exposure'), local(age_groups)
-			quietly levelsof sex if _st == 1 & !missing(`exposure'), local(sex_groups)
 
 			foreach age of local age_groups {
-				foreach s of local sex_groups {
 
-					local age_label : label (agegroup_land) `age'
-					local sex_label : label (sex) `s'
+				local age_label : label (agegroup_land) `age'
 
-					local model_terms i.`exposure' if !missing(`exposure') & agegroup_land == `age' & sex == `s'
-					cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted: `age_label', `sex_label'"'
-				}
+				local model_terms i.`exposure' age_land_decile i.sex if !missing(`exposure') & agegroup_land == `age'
+				cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age/sex-adjusted: age `age_label'"'
+			}
+
+			****Sex-stratified models, adjusted for age
+			quietly levelsof sex if _st == 1 & !missing(`exposure'), local(sex_groups)
+
+			foreach s of local sex_groups {
+
+				local sex_label : label (sex) `s'
+
+				local model_terms i.`exposure' age_land_decile if !missing(`exposure') & sex == `s'
+				cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Age-adjusted: `sex_label'"'
 			}
 		}
-				
+						
 		/*
 	    ****Run Fine-Gray competing-risk models (stcprep) for primary model and exposure
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
