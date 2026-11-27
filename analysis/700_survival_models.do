@@ -1319,17 +1319,16 @@ foreach var in imd ethnicity smoke {
 }
 
 ***Generate age group at landmark for stratified analyses
-
-recode age_land 18/39.9999 = 1 ///
-                40/59.9999 = 2 ///
-                60/79.9999 = 3 ///
-                80/max = 4 ///
-                (else = .), gen(agegroup_land)
+gen agegroup_land = .
+replace agegroup_land = 1 if age_land >= 18 & age_land < 40
+replace agegroup_land = 2 if age_land >= 40 & age_land < 60
+replace agegroup_land = 3 if age_land >= 60 & age_land < 80
+replace agegroup_land = 4 if age_land >= 80 & !missing(age_land)
 
 lab define agegroup_land 1 "18 to 39" ///
-                           2 "40 to 59" ///
-                           3 "60 to 79" ///
-                           4 "80 or above", modify
+                         2 "40 to 59" ///
+                         3 "60 to 79" ///
+                         4 "80 or above", modify
 
 lab values agegroup_land agegroup_land
 lab var agegroup_land "Age group at landmark"
