@@ -349,7 +349,7 @@ program define cox_model, rclass
 	}
 
 	**Crude Kaplan-Meier risk at 5 years
-	if "`model_label'" == "Unadjusted" {
+	if strpos("`model_label'", "Unadjusted") == 1 {
 
 		tempvar km_survival km_lower km_upper
 
@@ -408,7 +408,7 @@ program define cox_model, rclass
 }
 
 	**Standardised adjusted risk at 5 years
-	if "`model_label'" != "Unadjusted" {
+	if strpos("`model_label'", "Unadjusted") == 1 {
 
 		tempvar baseline_survival focal_original xb risk_cf
 
@@ -1298,7 +1298,7 @@ label var hernia_land_date "Incident inguinal hernia after ULT landmark"
 **Define outcome list to loop through
 local primary_outcome sec_ckd_egfr_land_date
 local sens_outcomes first_ckd_egfr_land_date first_ckd_code_land_date 
-local secondary_outcomes death_land_date hernia_land_date
+local secondary_outcomes hernia_land_date
 local outcomes `primary_outcome' `sens_outcomes' `secondary_outcomes' 
 *local outcomes `primary_outcome' `secondary_outcomes'
 
@@ -1317,6 +1317,21 @@ local patient_predictors_extra ///
 foreach var in imd ethnicity smoke {
     replace `var' = . if `var' == 9
 }
+
+***Generate age group at landmark for stratified analyses
+gen agegroup_land = .
+replace agegroup_land = 1 if age_land >= 18 & age_land < 40
+replace agegroup_land = 2 if age_land >= 40 & age_land < 60
+replace agegroup_land = 3 if age_land >= 60 & age_land < 80
+replace agegroup_land = 4 if age_land >= 80 & !missing(age_land)
+
+lab define agegroup_land 1 "18 to 39" ///
+                         2 "40 to 59" ///
+                         3 "60 to 79" ///
+                         4 "80 or above", modify
+
+lab values agegroup_land agegroup_land
+lab var agegroup_land "Age group at landmark"
 	
 *Run landmark Cox models =======================================================
 
@@ -1572,6 +1587,25 @@ foreach outcome of local outcomes {
 				di as error "Time-split analysis failed; return code `ts_rc'"
 			}
 		}
+		
+		***Run unadjusted models stratified by age group and sex
+		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" & `primary_model_ok' == 1 {
+
+			quietly levelsof agegroup_land if _st == 1 & !missing(`exposure'), local(age_groups)
+			quietly levelsof sex if _st == 1 & !missing(`exposure'), local(sex_groups)
+
+			foreach age of local age_groups {
+				foreach s of local sex_groups {
+
+					local age_label : label (agegroup_land) `age'
+					local sex_label : label (sex) `s'
+
+					local model_terms i.`exposure' if !missing(`exposure') & agegroup_land == `age' & sex == `s'
+					cox_model `"`model_terms'"' `"i.`exposure'"' `"`outcome'"' `"`outlabel'"' `"Unadjusted: `age_label', `sex_label'"'
+				}
+			}
+		}
+				
 		/*
 	    ****Run Fine-Gray competing-risk models (stcprep) for primary model and exposure
 		if "`outcome'" == "`primary_outcome'" & "`exposure'" == "`primary_exposure'" {
